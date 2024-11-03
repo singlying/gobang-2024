@@ -15,7 +15,7 @@ ConcurrencyCaluate：和并发没有关系，给出了选择算法和价值评�
 # 待办事项
 
 - 删除judgeAll()相关的代码，提高速度
-- 解决player = 1 还是 0 的问题，先后后手问题
+- 解决player = 1 还是 0 的问题，先后后手问题  √√√√√√√
   - 相关的变量： nowblack  player  
   - USB()  bestchild()  UCTsearch()  treePolicy()  expandNode(player)
   - UCTsearch__ -> treePolicy__ ->  expandNode__
@@ -23,6 +23,11 @@ ConcurrencyCaluate：和并发没有关系，给出了选择算法和价值评�
   - ​                                        ->conFun__ -> defaultPolicy__
   - ​                    -> bestChild__
   - judge__
+- bestchild() 中的goodNext的使用
+- ChooseCnt的作用是什么？  选择作用   当搜索次数较少的时候
+- 使用Hash  unordered_map  经过测试 发现Hashmap和map效率几乎相同，但map要更高一点。。。不改了
+
+
 
 
 

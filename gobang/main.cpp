@@ -6,6 +6,8 @@
 #include <iostream>
 #include <random>
 #include <map>
+#include <unordered_map>
+#include <utility>
 #include <sstream>
 #include <vector>
 using namespace std;
@@ -30,7 +32,7 @@ constexpr static int boxNum = 11;
 class IO {
 public:
     static int getCommand(const std::string& command) {
-        static const std::map<std::string, int> commandMap =
+        static const unordered_map<std::string, int> commandMap =
         { {"START", START}, {"PLACE", PLACE}, {"TURN", TURN} };
 
         auto it = commandMap.find(command);
@@ -55,6 +57,8 @@ class Chess
 private:
     int gomoku[boxNum + 1][boxNum + 1];
     std::pair<int, int> lastPoint;
+
+    friend struct ChessHash;
 
 public:
     /// player = 1白棋 / 2黑棋   这里整个是反的！！！！
@@ -264,6 +268,28 @@ public:
 
 class ConcurrencyCaluate;
 
+// 定义棋局状态的哈希函数
+struct ChessHash {
+    std::size_t operator()(const Chess& chess) const {
+        // 使用 std::hash 计算棋盘状态的哈希值
+        std::size_t hashValue = 0;
+        std::hash<int> intHasher;
+
+        // 哈希棋盘
+        for (int i = 1; i <= boxNum; ++i) {
+            for (int j = 1; j <= boxNum; ++j) {
+                hashValue ^= intHasher(chess.gomoku[i][j]) + 0x9e3779b9 + (hashValue << 6) + (hashValue >> 2);
+            }
+        }
+
+        // 哈希上一次落子
+        hashValue ^= intHasher(chess.lastPoint.first) + 0x9e3779b9 + (hashValue << 6) + (hashValue >> 2);
+        hashValue ^= intHasher(chess.lastPoint.second) + 0x9e3779b9 + (hashValue << 6) + (hashValue >> 2);
+
+        return hashValue;
+    }
+};
+
 class MCTS
 {
 public:
@@ -271,16 +297,18 @@ public:
     ////////////Tree tree;
 
     static const int searchRange = 2;       ///< 搜索范围
-    // static const int selectNum = 50;        ///< 选择次数
+    static const int selectNum = 100;        ///< 选择次数
     static const int simulationNum = 8;     ///< 每个状态模拟次数
 
-    std::map<Chess, Properity> mp; // 每个棋局的状态及其对应的属性
-    std::map<Chess, Chess> fa;  // 父节点
+    //std::map<Chess, Properity> mp; // 每个棋局的状态及其对应的属性
+    //std::map<Chess, Chess> fa;  // 父节点
+    unordered_map<Chess, Properity, ChessHash> mp; // 每个棋局中棋子个数
+    unordered_map<Chess, Chess, ChessHash> fa; // 父节点
 
     int chooseCnt = 0; // 选择次数
 
-    int current_player; // 当前玩家 1黑 2白
-    int current_opponent;
+    int current_player = 1; // 当前玩家 1黑 2白
+    int current_opponent = 2;
 
     // 初始化棋局
     void initChess(Chess chess) {
@@ -712,6 +740,7 @@ Chess MCTS::UCTsearch(Chess chess, std::pair<int, int> center, int player) {
 
     
     while (std::chrono::steady_clock::now() < endTime) {
+    //while (chooseCnt <= selectNum) {
         chooseCnt++;
         Chess selectPoint = treePolicy(chess, center, player); // 函数返回新的Chess和当前player
 
@@ -720,7 +749,7 @@ Chess MCTS::UCTsearch(Chess chess, std::pair<int, int> center, int player) {
             Confun(selectPoint, newPlayer, chess);
         }
     }
-
+    IO::output_DEBUG("模拟次数   " + to_string(chooseCnt));
     return bestChild(chess, player);
 }
 

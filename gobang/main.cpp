@@ -111,6 +111,8 @@ public:
         gomoku[5][6] = BLACK;
         gomoku[6][5] = BLACK;
         gomoku[6][6] = WHITE;
+
+        setChess(6, 6, WHITE); // 当己方为黑棋时，给出一个白棋的上一步位点
     }
 
     Chess(int rgomoku[boxNum + 1][boxNum + 1]) {
@@ -269,7 +271,7 @@ public:
     ////////////Tree tree;
 
     static const int searchRange = 2;       ///< 搜索范围
-    static const int selectNum = 50;        ///< 选择次数
+    // static const int selectNum = 50;        ///< 选择次数
     static const int simulationNum = 8;     ///< 每个状态模拟次数
 
     std::map<Chess, Properity> mp; // 每个棋局的状态及其对应的属性
@@ -305,7 +307,7 @@ public:
     Chess UCTsearch(Chess chess, std::pair<int, int> center, int player);
 
     /// @brief 选择
-    std::pair<Chess, int> treePolicy(Chess chess, std::pair<int, int> center, int player) {
+    Chess treePolicy(Chess chess, std::pair<int, int> center, int player) {
 
         while (!GameModel::is_terminate(chess) && !GameModel::judgeAll(chess)) // 这里可以删除掉
         {
@@ -314,28 +316,24 @@ public:
             int y1 = std::max(0, center.second - searchRange);
             int y2 = std::min(boxNum, center.second + searchRange);
 
-            ////////////////if (cntNum(chess, x1, x2, y1, y2) + tree.find(chess).getChildren().size() < (x2 - x1 + 1) * (y2 - y1 + 1))
-            if (cntNum(chess, x1, x2, y1, y2) + mp[chess].vec.size() < (x2 - x1 + 1) * (y2 - y1 + 1))
-            {
-                return std::make_pair(expandNode(chess, center, player), player); /////////////// 这里的返回值需要改
+            // 如果当前范围中还有 没有棋子的节点 且 没有被扩展的节点
+            if (cntNum(chess, x1, x2, y1, y2) + mp[chess].vec.size() < (x2 - x1 + 1) * (y2 - y1 + 1)) {
+                return expandNode(chess, center, player); /////////////// 这里的返回值需要改
             }
-            else
-            {
+            else { // 如果选中范围中节点全部被扩展过
                 Chess y = chess;
-                std::vector<Chess>::iterator it;
 
-                ////////////////if (tree.find(y).getChildren().size() == 0)break;
-                if (mp[y].vec.size() == 0)break;
+                if (mp[y].vec.size() == 0) {
+                    IO::output_DEBUG("325行 error：当前范围内所有节点都被扩展过，但当前节点没有子节点, 说明范围内所有位置全都有棋子");
+                    break;
+                }// 这一步是不能被执行的 否则没有返回值了  
+
                 double maxn = -std::numeric_limits<double>::infinity();
 
-                ////////////////auto IterChildVec = tree.find(y).getChildren();
-                ////////////////for (auto it = IterChildVec.begin(); it != IterChildVec.end(); it++)
-                for (auto it = mp[y].vec.begin(); it != mp[y].vec.end(); it++)
-                {
-                    if (UCB(*it, player) >= maxn)///////////////原来是一个*
-                    {
-                        maxn = UCB(*it, player);///////////////原来是一个*
-                        chess = *it;///////////////原来是一个*
+                for (auto it = mp[y].vec.begin(); it != mp[y].vec.end(); it++) {
+                    if (UCB(*it, player) >= maxn) {
+                        maxn = UCB(*it, player);
+                        chess = *it;
                     }
                 }
                 fa[chess] = y;
@@ -361,21 +359,18 @@ public:
             int j = y1 + rand() % (y2 - y1 + 1);
             int o = chess.getChess(i, j);
             y.setChess(i, j, player);
-            if (!chess.getChess(i, j) && mp.find(y) == mp.end())
+            if (!o && mp.find(y) == mp.end()) // 如果当前位置为空 y未被扩展过
             {
-                if (goodNext == y) // 特殊情况
+                if (goodNext == y) // 特殊情况  如果当前要扩展的节点刚好是现在最佳的节点，则提高其优先级
                 {
                     initChess(y);
                     mp[y].value += 1000;
                     mp[chess].vec.push_back(goodNext);
                     fa[y] = chess;
-                    ///////////////tree.find(chess).addChild(goodNext);
                     return y;
                 }
 
 
-                ///////////////initChess(y);
-                ///////////////tree.find(chess).addChild(y);
                 initChess(y);
                 mp[chess].vec.push_back(y);
                 fa[y] = chess;
@@ -498,7 +493,6 @@ public:
     Chess goodNext; // 最好的下一步
 };
 
-// 处理并发计算
 class ConcurrencyCaluate
 {
 public:
@@ -547,19 +541,10 @@ public:
     /// @brief 价值算法
     void calculateScore() {
         // 统计玩家或者电脑连成的子
-        int personNum = 0; // 玩家连成子的个数
-        int botNum = 0; // AI连成子的个数
+        int oppNum = 0; // 玩家连成子的个数
+        int myNum = 0; // AI连成子的个数
         int emptyNum = 0; // 各方向空白位的个数
 
-        // 清空评分数组
-        scoreMapVec.clear();
-        for (int i = 0; i <= boxNum; i++)
-        {
-            std::vector<int> lineScores;
-            for (int j = 0; j <= boxNum; j++)
-                lineScores.push_back(0);
-            scoreMapVec.push_back(lineScores);
-        }
 
         // 计分（此处是完全遍历，其实可以用bfs或者dfs加减枝降低复杂度，通过调整权重值，调整AI智能程度以及攻守风格）
         for (int row = 0; row <= boxNum; row++)
@@ -574,8 +559,8 @@ public:
                         for (int x = -1; x <= 1; x++)
                         {
                             // 重置
-                            personNum = 0;
-                            botNum = 0;
+                            oppNum = 0;
+                            myNum = 0;
                             emptyNum = 0;
 
                             // 原坐标不算
@@ -590,7 +575,7 @@ public:
                                         col + i * x >= 0 && col + i * x <= boxNum &&
                                         gameMapVec[row + i * y][col + i * x] == 1) // 玩家的子
                                     {
-                                        personNum++;
+                                        oppNum++;
                                     }
                                     else if (row + i * y >= 0 && row + i * y <= boxNum &&
                                         col + i * x >= 0 && col + i * x <= boxNum &&
@@ -609,7 +594,7 @@ public:
                                         col - i * x >= 0 && col - i * x <= boxNum &&
                                         gameMapVec[row - i * y][col - i * x] == 1) // 玩家的子
                                     {
-                                        personNum++;
+                                        oppNum++;
                                     }
                                     else if (row - i * y >= 0 && row - i * y <= boxNum &&
                                         col - i * x >= 0 && col - i * x <= boxNum &&
@@ -622,16 +607,16 @@ public:
                                         break;
                                 }
 
-                                if (personNum == 1)                      // 杀二
+                                if (oppNum == 1)                      // 杀二
                                     scoreMapVec[row][col] += 10;
-                                else if (personNum == 2)                 // 杀三
+                                else if (oppNum == 2)                 // 杀三
                                 {
                                     if (emptyNum == 1)
                                         scoreMapVec[row][col] += 30;
                                     else if (emptyNum == 2)
                                         scoreMapVec[row][col] += 40;
                                 }
-                                else if (personNum == 3)                 // 杀四
+                                else if (oppNum == 3)                 // 杀四
                                 {
                                     // 量变空位不一样，优先级不一样
                                     if (emptyNum == 1)
@@ -639,7 +624,7 @@ public:
                                     else if (emptyNum == 2)
                                         scoreMapVec[row][col] += 110;
                                 }
-                                else if (personNum == 4)                 // 杀五
+                                else if (oppNum == 4)                 // 杀五
                                     scoreMapVec[row][col] += 10100;
 
                                 // 进行一次清空
@@ -652,7 +637,7 @@ public:
                                         col + i * x >= 0 && col + i * x <= boxNum &&
                                         gameMapVec[row + i * y][col + i * x] == 1) // 玩家的子
                                     {
-                                        botNum++;
+                                        myNum++;
                                     }
                                     else if (row + i * y >= 0 && row + i * y <= boxNum &&
                                         col + i * x >= 0 && col + i * x <= boxNum &&
@@ -671,7 +656,7 @@ public:
                                         col - i * x >= 0 && col - i * x <= boxNum &&
                                         gameMapVec[row - i * y][col - i * x] == -1) // AI的子
                                     {
-                                        botNum++;
+                                        myNum++;
                                     }
                                     else if (row - i * y >= 0 && row - i * y <= boxNum &&
                                         col - i * x >= 0 && col - i * x <= boxNum &&
@@ -684,25 +669,25 @@ public:
                                         break;
                                 }
 
-                                if (botNum == 0)                      // 普通下子
+                                if (myNum == 0)                      // 普通下子
                                     scoreMapVec[row][col] += 5;
-                                else if (botNum == 1)                 // 活二
+                                else if (myNum == 1)                 // 活二
                                     scoreMapVec[row][col] += 10;
-                                else if (botNum == 2)
+                                else if (myNum == 2)
                                 {
                                     if (emptyNum == 1)                // 死三
                                         scoreMapVec[row][col] += 25;
                                     else if (emptyNum == 2)
                                         scoreMapVec[row][col] += 50;  // 活三
                                 }
-                                else if (botNum == 3)
+                                else if (myNum == 3)
                                 {
                                     if (emptyNum == 1)                // 死四
                                         scoreMapVec[row][col] += 55;
                                     else if (emptyNum == 2)
                                         scoreMapVec[row][col] += 100; // 活四
                                 }
-                                else if (botNum >= 4)
+                                else if (myNum >= 4)
                                     scoreMapVec[row][col] += 10000;   // 活五
 
                             }
@@ -713,7 +698,13 @@ public:
     }
 };
 
+#include <chrono> // For timing
+
 Chess MCTS::UCTsearch(Chess chess, std::pair<int, int> center, int player) {
+    // Get the starting time
+    auto startTime = std::chrono::steady_clock::now();
+    auto endTime = startTime + std::chrono::duration<double>(1.85); // Set end time for 1.9 seconds
+
     if (mp.find(chess) == mp.end())
         initChess(chess);
 
@@ -725,42 +716,37 @@ Chess MCTS::UCTsearch(Chess chess, std::pair<int, int> center, int player) {
     mp.clear();
 
     chooseCnt = 0; // 选择次数
-    while (chooseCnt <= selectNum)
-    {
+    
+    while (std::chrono::steady_clock::now() < endTime) {
         chooseCnt++;
-        std::pair<Chess, int> selectPoint = treePolicy(chess, center, player);
+        Chess selectPoint = treePolicy(chess, center, player); // 函数返回新的Chess和当前player
 
         for (int i = 1; i <= simulationNum; i++) {
-            int newPlayer = (selectPoint.second == 1) ? 2 : 1;
-            Confun(selectPoint.first, newPlayer, chess);
+            int newPlayer = (player == 1) ? 2 : 1;
+            Confun(selectPoint, newPlayer, chess);
         }
     }
-
-    //IO::output_DEBUG("root: " + to_string(mp[root].value));
-
-    //for (auto& it : mp[root].vec)
-    //{
-    //    IO::output_DEBUG("child:" + to_string(mp[it].value));
-    //}
 
     Chess ans = bestChild(chess, player);
     return ans;
 }
 
-void MCTS::defaultPolicy(Chess chess, int nowblack, int& value) {
+
+void MCTS::defaultPolicy(Chess chess, int player, int& value) {
     while (1)
     {
         if (GameModel::judgeAll(chess) || GameModel::is_terminate(chess))
             break;
         std::pair<int, int> h = calCenter(chess);
 
-        if (nowblack == this->current_player)
+        if (player == this->current_player)
         {
             ConcurrencyCaluate cal;
             chess = cal.bestChildPro(chess);
-            nowblack = (nowblack == 1 ? 2 : 1);
+            player = (player == 1 ? 2 : 1);
         }
 
+        // 这里开始随机下棋
         int randNum = rand() % 100;
         int i = 0, j = 0;
         if (randNum < 50)
@@ -775,8 +761,8 @@ void MCTS::defaultPolicy(Chess chess, int nowblack, int& value) {
         }
         if (!chess.getChess(i, j))
         {
-            chess.setChess(i, j, nowblack);
-            nowblack = (nowblack == 1 ? 2 : 1);
+            chess.setChess(i, j, player);
+            player = (player == 1 ? 2 : 1);
         }
     }
 
@@ -797,6 +783,10 @@ int main() {
     // 暂时使用 while 忙等待来实现  之后修改为多线程，在等待中继续进行计算
     string input;
     while (getline(cin, input)) {
+
+        // 开始计时
+        auto startTime = std::chrono::high_resolution_clock::now();
+
         string command;
         istringstream iss(input);
         iss >> command;
@@ -817,12 +807,8 @@ int main() {
                 chess.setChess(x, y, opponent);
                 break;
             case TURN: {
-                // 开始计时
-                auto startTime = std::chrono::high_resolution_clock::now();
-
                 // 执行需要计时的代码块
-                chess = mcts.UCTsearch(chess, chess.getLastPoint(), player); /////// 这是1还是多少？
-                IO::output_DEBUG(to_string(chess.getLastPoint().first) + " " + to_string(chess.getLastPoint().second));
+                chess = mcts.UCTsearch(chess, chess.getLastPoint(), player);
                 IO::output_PLACE(make_pair(chess.getLastPoint().first, chess.getLastPoint().second));
 
                 // 结束计时

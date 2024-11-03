@@ -61,8 +61,6 @@ private:
     friend struct ChessHash;
 
 public:
-    /// player = 1白棋 / 2黑棋   这里整个是反的！！！！
-
     void setChess(int x, int y, int player) {
         gomoku[x][y] = player;
         lastPoint = std::make_pair(x, y);
@@ -311,9 +309,6 @@ struct ChessHash {
 class MCTS
 {
 public:
-    ////////////using Tree = MultiwayTree<_Multiway_tree_traits<Chess>>;
-    ////////////Tree tree;
-
     static const int searchRange = 2;       ///< 搜索范围
     static const int selectNum = 100;        ///< 选择次数
     static const int simulationNum = 8;     ///< 每个状态模拟次数
@@ -430,8 +425,7 @@ public:
 
 
     /// <summary>
-    /// bestChildPro()侧重于评估并选择下一步的落子，而bestChild()则是基于已有的搜索结果来选择最佳子节点。
-    /// 前者是一个实时决策过程，后者则是在已有树结构的基础上进行选择。
+    /// bestChildPro()使用价值评估，不属于UCB，而bestChild()则是基于已有的搜索结果来选择最佳子节点。
     /// </summary>
     Chess bestChild(Chess chess, int nowblack) {
         Chess ans = chess;
@@ -489,9 +483,6 @@ public:
             return -val / mocknum + sqrt(log(mocknum) / mocknum);
     }
 
-
-    //    std::pair<int, std::pair<int, int>> checkFastwin_1(Chess chess);
-    //    std::pair<int, std::pair<int, int>> checkFastwin_2(Chess chess);
 
     // 返回当前局面平均坐标
     static std::pair<int, int> calCenter(Chess chess) {

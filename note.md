@@ -8,6 +8,13 @@
 
 - 删除judgeAll()相关的代码，提高速度
 - 解决player = 1 还是 0 的问题，先后后手问题
+  - 相关的变量： nowblack  player  
+  - USB()  bestchild()  UCTsearch()  treePolicy()  expandNode(player)
+  - UCTsearch__ -> treePolicy__ ->  expandNode__
+  - ​                                       -> UCB__
+  - ​                                        ->conFun__ -> defaultPolicy__
+  - ​                    -> bestChild__
+  - judge__
 
 
 

@@ -106,6 +106,11 @@ public:
         for (int i = 0; i < boxNum + 1; ++i)
             for (int j = 0; j < boxNum + 1; ++j)
                 gomoku[i][j] = 0;
+
+        gomoku[5][5] = WHITE;
+        gomoku[5][6] = BLACK;
+        gomoku[6][5] = BLACK;
+        gomoku[6][6] = WHITE;
     }
 
     Chess(int rgomoku[boxNum + 1][boxNum + 1]) {
@@ -217,7 +222,7 @@ public:
         return false;
     }
 
-    // 1代表白棋赢，2代表黑棋赢，0代表没结束
+    // 1代表黑棋赢，2代表白棋赢，0代表没结束
     static int judgeAll(Chess chess) {
         for (int i = 0; i <= boxNum; i++)
             for (int j = 0; j <= boxNum; j++)
@@ -255,6 +260,8 @@ public:
     std::vector<Chess> vec;  // 关联的棋子
 };
 
+class ConcurrencyCaluate;
+
 class MCTS
 {
 public:
@@ -269,6 +276,9 @@ public:
     std::map<Chess, Chess> fa;  // 父节点
 
     int chooseCnt; // 选择次数
+
+    int current_player; // 当前玩家 1黑 2白
+    int current_opponent;
 
     // 初始化棋局
     void initChess(Chess chess) {
@@ -292,38 +302,7 @@ public:
 
     // 实现树的搜索，返回最优的落子位置
     /// 搜索函数传入的是原来那个chess
-    Chess UCTsearch(Chess chess, std::pair<int, int> center, int player) {
-        if (mp.find(chess) == mp.end())
-            initChess(chess);
-
-        fa.clear();
-
-        ConcurrencyCaluate choose;
-        goodNext = choose.bestChildPro(chess);
-        root = chess;
-        mp.clear();
-
-        chooseCnt = 0; // 选择次数
-        while (chooseCnt <= selectNum)
-        {
-            chooseCnt++;
-            std::pair<Chess, int> selectPoint = treePolicy(chess, center, player);
-
-            /////////////// 移除线程池相关代码
-            for (int i = 1; i <= simulationNum; i++)
-                Confun(selectPoint.first, selectPoint.second ^ 1, chess);
-        }
-
-        IO::output_DEBUG("root: " + to_string(mp[root].value));
-
-        for (auto& it : mp[root].vec)
-        {
-            IO::output_DEBUG("child:" + to_string(mp[it].value));
-        }
-
-        Chess ans = bestChild(chess, player);
-        return ans;
-    }
+    Chess UCTsearch(Chess chess, std::pair<int, int> center, int player);
 
     /// @brief 选择
     std::pair<Chess, int> treePolicy(Chess chess, std::pair<int, int> center, int player) {
@@ -361,13 +340,13 @@ public:
                 }
                 fa[chess] = y;
             }
-            player ^= 1;
+            player = (player == 1 ? 2 : 1);
         }
     }
 
     /// @brief 扩展
     /// @attention 目前只有5*5的范围内搜索，搜索100000次，如果运气非常非常非常非常不好就expand不到那1/25的点~
-    Chess expandNode(Chess chess, std::pair<int, int> center, int nowblack) {
+    Chess expandNode(Chess chess, std::pair<int, int> center, int player) {
         Chess y = chess;
 
         int x1 = std::max(0, center.first - searchRange);
@@ -381,7 +360,7 @@ public:
             int i = x1 + rand() % (x2 - x1 + 1);
             int j = y1 + rand() % (y2 - y1 + 1);
             int o = chess.getChess(i, j);
-            y.setChess(i, j, nowblack);
+            y.setChess(i, j, player);
             if (!chess.getChess(i, j) && mp.find(y) == mp.end())
             {
                 if (goodNext == y) // 特殊情况
@@ -441,46 +420,7 @@ public:
     }
 
     /// @brief 模拟    游戏至结束，黑色赢返回1，白色返回-1，和棋返回0
-    void defaultPolicy(Chess chess, int nowblack, int& value) {
-        while (1)
-        {
-            if (GameModel::judgeAll(chess) || GameModel::is_terminate(chess))
-                break;
-            std::pair<int, int> h = calCenter(chess);
-
-            if (nowblack)
-            {
-                ConcurrencyCaluate cal;
-                chess = cal.bestChildPro(chess);
-                nowblack ^= 1;
-            }
-
-            int randNum = rand() % 100;
-            int i = 0, j = 0;
-            if (randNum < 50)
-            {
-                i = std::min(std::max(0, h.first - searchRange + rand() % (searchRange * 2 + 1)), boxNum);
-                j = std::min(std::max(0, h.second - searchRange + rand() % (searchRange * 2 + 1)), boxNum);
-            }
-            else
-            {
-                i = rand() % (boxNum + 1);
-                j = rand() % (boxNum + 1);
-            }
-            if (!chess.getChess(i, j))
-            {
-                chess.setChess(i, j, nowblack + 1);
-                nowblack ^= 1;
-            }
-        }
-
-        if (GameModel::judgeAll(chess) == 1)
-            value = -1;
-        else if (GameModel::judgeAll(chess) == 2)
-            value = 1;
-        else
-            value = 0;
-    }
+    void defaultPolicy(Chess chess, int nowblack, int& value);
 
     /// @brief 回退
     void backUp(Chess x, Chess y, int value) {
@@ -508,9 +448,9 @@ public:
         double val = mp[chess].value, mocknum = mp[chess].mockNum;
         if (val + mocknum == 0)
             return -std::numeric_limits<double>::infinity();
-        if (player == 1)    // black
+        if (player == current_player)    // black
             return val / mocknum + sqrt(log(mocknum) / mocknum);
-        else if (player == 0) // white
+        else // white
             return -val / mocknum + sqrt(log(mocknum) / mocknum);
     }
 
@@ -773,11 +713,86 @@ public:
     }
 };
 
+Chess MCTS::UCTsearch(Chess chess, std::pair<int, int> center, int player) {
+    if (mp.find(chess) == mp.end())
+        initChess(chess);
+
+    fa.clear();
+
+    ConcurrencyCaluate choose;
+    goodNext = choose.bestChildPro(chess);
+    root = chess;
+    mp.clear();
+
+    chooseCnt = 0; // 选择次数
+    while (chooseCnt <= selectNum)
+    {
+        chooseCnt++;
+        std::pair<Chess, int> selectPoint = treePolicy(chess, center, player);
+
+        for (int i = 1; i <= simulationNum; i++) {
+            int newPlayer = (selectPoint.second == 1) ? 2 : 1;
+            Confun(selectPoint.first, newPlayer, chess);
+        }
+    }
+
+    //IO::output_DEBUG("root: " + to_string(mp[root].value));
+
+    //for (auto& it : mp[root].vec)
+    //{
+    //    IO::output_DEBUG("child:" + to_string(mp[it].value));
+    //}
+
+    Chess ans = bestChild(chess, player);
+    return ans;
+}
+
+void MCTS::defaultPolicy(Chess chess, int nowblack, int& value) {
+    while (1)
+    {
+        if (GameModel::judgeAll(chess) || GameModel::is_terminate(chess))
+            break;
+        std::pair<int, int> h = calCenter(chess);
+
+        if (nowblack == this->current_player)
+        {
+            ConcurrencyCaluate cal;
+            chess = cal.bestChildPro(chess);
+            nowblack = (nowblack == 1 ? 2 : 1);
+        }
+
+        int randNum = rand() % 100;
+        int i = 0, j = 0;
+        if (randNum < 50)
+        {
+            i = std::min(std::max(0, h.first - searchRange + rand() % (searchRange * 2 + 1)), boxNum);
+            j = std::min(std::max(0, h.second - searchRange + rand() % (searchRange * 2 + 1)), boxNum);
+        }
+        else
+        {
+            i = rand() % (boxNum + 1);
+            j = rand() % (boxNum + 1);
+        }
+        if (!chess.getChess(i, j))
+        {
+            chess.setChess(i, j, nowblack);
+            nowblack = (nowblack == 1 ? 2 : 1);
+        }
+    }
+
+    if (GameModel::judgeAll(chess) == current_opponent)
+        value = -1;
+    else if (GameModel::judgeAll(chess) == current_player)
+        value = 1;
+    else
+        value = 0;
+}
+
 int main() {
     MCTS mcts;
     Chess chess;
-    int player;
-    int opponent;
+    int player = 1;
+    int opponent = 2;
 
     // 暂时使用 while 忙等待来实现  之后修改为多线程，在等待中继续进行计算
     string input;
@@ -792,6 +807,8 @@ int main() {
                 iss >> temp;
                 player = static_cast<int>(temp);
                 opponent = (player == 1 ? 2 : 1);
+                mcts.current_player = player;
+                mcts.current_opponent = opponent;
                 IO::output_OK();
                 break;
             case PLACE:
@@ -800,9 +817,20 @@ int main() {
                 chess.setChess(x, y, opponent);
                 break;
             case TURN: {
+                // 开始计时
+                auto startTime = std::chrono::high_resolution_clock::now();
+
+                // 执行需要计时的代码块
                 chess = mcts.UCTsearch(chess, chess.getLastPoint(), player); /////// 这是1还是多少？
                 IO::output_DEBUG(to_string(chess.getLastPoint().first) + " " + to_string(chess.getLastPoint().second));
                 IO::output_PLACE(make_pair(chess.getLastPoint().first, chess.getLastPoint().second));
+
+                // 结束计时
+                auto endTime = std::chrono::high_resolution_clock::now();
+                auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime);
+                IO::output_DEBUG("代码执行时间（毫秒）: " + to_string(duration.count()));
+
+
                 break;
             }
             case END:

@@ -703,7 +703,7 @@ public:
 Chess MCTS::UCTsearch(Chess chess, std::pair<int, int> center, int player) {
     // Get the starting time
     auto startTime = std::chrono::steady_clock::now();
-    auto endTime = startTime + std::chrono::duration<double>(1.85); // Set end time for 1.9 seconds
+    auto endTime = startTime + std::chrono::duration<double>(1.5); // Set end time for 1.5 seconds
 
     if (mp.find(chess) == mp.end())
         initChess(chess);
@@ -727,8 +727,7 @@ Chess MCTS::UCTsearch(Chess chess, std::pair<int, int> center, int player) {
         }
     }
 
-    Chess ans = bestChild(chess, player);
-    return ans;
+    return bestChild(chess, player);
 }
 
 

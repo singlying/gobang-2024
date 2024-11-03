@@ -277,7 +277,7 @@ public:
     std::map<Chess, Properity> mp; // 每个棋局的状态及其对应的属性
     std::map<Chess, Chess> fa;  // 父节点
 
-    int chooseCnt; // 选择次数
+    int chooseCnt = 0; // 选择次数
 
     int current_player; // 当前玩家 1黑 2白
     int current_opponent;
@@ -388,22 +388,19 @@ public:
     /// </summary>
     Chess bestChild(Chess chess, int nowblack) {
         Chess ans = chess;
-        std::vector<Chess>::iterator it;
-        double maxn = -std::numeric_limits<double>::infinity(); /// 比最小值还小才行
-        ////////////////auto IterChildVec = tree.find(chess).getChildren();
-        ///////////////for (auto it = IterChildVec.begin(); it != IterChildVec.end(); it++)
+        double maxn = -std::numeric_limits<double>::infinity();
+
         for (auto it = mp[chess].vec.begin(); it != mp[chess].vec.end(); it++)
         {
-            if (UCB(*it, nowblack) >= maxn)///////////////原来是一个*
-            {
-                maxn = UCB(*it, nowblack);///////////////原来是一个*
-                ans = *it;///////////////原来是一个*
+            if (UCB(*it, nowblack) >= maxn) {
+                maxn = UCB(*it, nowblack);
+                ans = *it;
             }
         }
-        if (chooseCnt >= 25)
+        if (chooseCnt >= 25) // 这是在干什么 ？  这样会导致几乎选定的一定是goodNext  和搜索就没关系了
         {
             std::vector<Chess>::iterator iter = std::find(mp[root].vec.begin(), mp[root].vec.end(), goodNext);
-            if (iter == mp[root].vec.end())
+            if (iter == mp[root].vec.end()) // 如果预测的goodNext没有被随机模拟出来
             {
                 mp[chess].vec.push_back(goodNext);
                 ///////////////tree.find(chess).addChild(goodNext);
@@ -551,8 +548,7 @@ public:
             for (int col = 0; col <= boxNum; col++)
             {
                 // 空白点就算
-                if (row > 0 && col > 0 &&
-                    gameMapVec[row][col] == 0)
+                if (row > 0 && col > 0 && gameMapVec[row][col] == 0)
                 {
                     // 遍历周围八个方向
                     for (int y = -1; y <= 1; y++)
@@ -698,7 +694,6 @@ public:
     }
 };
 
-#include <chrono> // For timing
 
 Chess MCTS::UCTsearch(Chess chess, std::pair<int, int> center, int player) {
     // Get the starting time
@@ -715,7 +710,6 @@ Chess MCTS::UCTsearch(Chess chess, std::pair<int, int> center, int player) {
     root = chess;
     mp.clear();
 
-    chooseCnt = 0; // 选择次数
     
     while (std::chrono::steady_clock::now() < endTime) {
         chooseCnt++;

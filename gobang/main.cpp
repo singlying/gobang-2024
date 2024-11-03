@@ -168,43 +168,29 @@ public:
         int count = 0;
         int flag = nowWhite ? 1 : 2;
         //横向
-        for (int i = ((x - 4) < 0 ? 0 : x - 4); i <= ((x + 4) > boxNum ? boxNum : x + 4); ++i)
-        {
-            if (chess.getChess(i, y) == flag)
-                count++;
-            else
-                count = 0;
-            if (count == 5)
-                return true;
+        for (int i = ((x - 4) < 0 ? 0 : x - 4); i <= ((x + 4) > boxNum ? boxNum : x + 4); ++i) {
+            if (chess.getChess(i, y) == flag) count++;
+            else count = 0;
+            if (count == 5) return true;
         }
         //纵向
         count = 0;
-        for (int j = ((y - 4) < 0 ? 0 : y - 4); j <= ((y + 4) > boxNum ? boxNum : y + 4); ++j)
-        {
-            if (chess.getChess(x, j) == flag)
-                count++;
-            else
-                count = 0;
-            if (count == 5)
-                return true;
+        for (int j = ((y - 4) < 0 ? 0 : y - 4); j <= ((y + 4) > boxNum ? boxNum : y + 4); ++j) {
+            if (chess.getChess(x, j) == flag) count++;
+            else count = 0;
+            if (count == 5) return true;
         }
         //左下到右上
         count = 0;
-        for (int i = ((x - 4) < 0 ? 0 : x - 4); i <= ((x + 4) > boxNum ? boxNum : x + 4); ++i)
-        {
+        for (int i = ((x - 4) < 0 ? 0 : x - 4); i <= ((x + 4) > boxNum ? boxNum : x + 4); ++i) {
             int yy = y + i - x;
 
-            if (yy < 0)
-                continue;
-            else if (yy > boxNum)
-                break;
+            if (yy < 0) continue;
+            else if (yy > boxNum) break;
 
-            if (chess.getChess(i, yy) == flag)
-                count++;
-            else
-                count = 0;
-            if (count == 5)
-                return true;
+            if (chess.getChess(i, yy) == flag) count++;
+            else count = 0;
+            if (count == 5) return true;
         }
         //左上到右下
         count = 0;
@@ -230,16 +216,48 @@ public:
 
     // 1代表黑棋赢，2代表白棋赢，0代表没结束
     static int judgeAll(Chess chess) {
-        for (int i = 0; i <= boxNum; i++)
-            for (int j = 0; j <= boxNum; j++)
-            {
-                if (judge(chess, i, j, true))
-                    return 1;
-                else if (judge(chess, i, j, false))
-                    return 2;
+        int x = chess.getLastPoint().first;
+        int y = chess.getLastPoint().second;
+        int player = chess.getChess(x, y);
+
+        // 定义四个方向
+        const std::vector<std::pair<int, int>> directions = {
+            {1, 0}, {0, 1}, {1, 1}, {1, -1}
+        };
+
+        for (const auto& dir : directions) {
+            int count = 1; // 包含自己
+
+            // 向一个方向检查
+            for (int step = 1; step < 5; ++step) {
+                int nx = x + dir.first * step;
+                int ny = y + dir.second * step;
+                if (nx > 0 && nx <= boxNum && ny > 0 && ny <= boxNum && chess.getChess(nx, ny) == player) {
+                    count++;
+                }
+                else {
+                    break;
+                }
             }
 
-        return 0;
+            // 向反方向检查
+            for (int step = 1; step < 5; ++step) {
+                int nx = x - dir.first * step;
+                int ny = y - dir.second * step;
+                if (nx > 0 && nx <= boxNum && ny > 0 && ny <= boxNum && chess.getChess(nx, ny) == player) {
+                    count++;
+                }
+                else {
+                    break;
+                }
+            }
+
+            // 检查是否有五个连成一线
+            if (count >= 5) {
+                return player; // 返回获胜玩家
+            }
+        }
+        return 0; // 游戏未结束
     }
 
     // 返回1时代表棋盘满了，是终端节点 0 棋盘没有满
@@ -266,7 +284,7 @@ public:
     std::vector<Chess> vec;  // 关联的棋子
 };
 
-class ConcurrencyCaluate;
+class ValueCaluate;
 
 // 定义棋局状态的哈希函数
 struct ChessHash {
@@ -300,10 +318,10 @@ public:
     static const int selectNum = 100;        ///< 选择次数
     static const int simulationNum = 8;     ///< 每个状态模拟次数
 
-    //std::map<Chess, Properity> mp; // 每个棋局的状态及其对应的属性
-    //std::map<Chess, Chess> fa;  // 父节点
-    unordered_map<Chess, Properity, ChessHash> mp; // 每个棋局中棋子个数
-    unordered_map<Chess, Chess, ChessHash> fa; // 父节点
+    std::map<Chess, Properity> mp; // 每个棋局中棋子个数 
+    std::map<Chess, Chess> fa; // 父节点
+    //unordered_map<Chess, Properity, ChessHash> mp; //  Hash map   测试后发现效率比map略低
+    //unordered_map<Chess, Chess, ChessHash> fa; // 父节点
 
     int chooseCnt = 0; // 选择次数
 
@@ -335,7 +353,7 @@ public:
     Chess UCTsearch(Chess chess, std::pair<int, int> center, int player);
 
     /// @brief 选择
-    Chess treePolicy(Chess chess, std::pair<int, int> center, int player) {
+    Chess Selection(Chess chess, std::pair<int, int> center, int player) {
 
         while (!GameModel::is_terminate(chess) && !GameModel::judgeAll(chess)) // 这里可以删除掉
         {
@@ -352,12 +370,13 @@ public:
                 Chess y = chess;
 
                 if (mp[y].vec.size() == 0) {
-                    IO::output_DEBUG("325行 error：当前范围内所有节点都被扩展过，但当前节点没有子节点, 说明范围内所有位置全都有棋子");
+                    IO::output_DEBUG("treePolicy() error：当前范围内所有节点都被扩展过，但当前节点没有子节点");
                     break;
                 }// 这一步是不能被执行的 否则没有返回值了  
 
                 double maxn = -std::numeric_limits<double>::infinity();
 
+                // 找最佳的子节点进行下一层的搜索
                 for (auto it = mp[y].vec.begin(); it != mp[y].vec.end(); it++) {
                     if (UCB(*it, player) >= maxn) {
                         maxn = UCB(*it, player);
@@ -440,24 +459,20 @@ public:
     }
 
     /// @brief 模拟    游戏至结束，黑色赢返回1，白色返回-1，和棋返回0
-    void defaultPolicy(Chess chess, int nowblack, int& value);
+    int Simulation(Chess chess, int nowblack);
 
     /// @brief 回退
-    void backUp(Chess x, Chess y, int value) {
-        mp[x].value += value;
-        mp[x].mockNum++;
-        while (!(x == y))
+    void backUp(Chess child, Chess origin, int value) {
+        mp[child].value += value;
+        mp[child].mockNum++;
+        while (!(child == origin))
         {
-            if (fa.find(x) == fa.end())
+            if (fa.find(child) == fa.end())
                 break;
-            x = fa[x];
+            child = fa[child];
 
-            ////////////////if (x == *tree.getRoot())
-            ////////////////    break;
-            ////////////////x = *tree.find(x).getParent();
-
-            mp[x].value += value;
-            mp[x].mockNum++;
+            mp[child].value += value;
+            mp[child].mockNum++;
         }
     }
 
@@ -474,12 +489,6 @@ public:
             return -val / mocknum + sqrt(log(mocknum) / mocknum);
     }
 
-    void Confun(Chess chess, int nowblack, Chess y)
-    {
-        int val;
-        defaultPolicy(chess, nowblack, val);  // 选择
-        backUp(chess, y, val);           // 回溯
-    }
 
     //    std::pair<int, std::pair<int, int>> checkFastwin_1(Chess chess);
     //    std::pair<int, std::pair<int, int>> checkFastwin_2(Chess chess);
@@ -518,7 +527,7 @@ public:
     Chess goodNext; // 最好的下一步
 };
 
-class ConcurrencyCaluate
+class ValueCaluate
 {
 public:
 
@@ -733,20 +742,22 @@ Chess MCTS::UCTsearch(Chess chess, std::pair<int, int> center, int player) {
 
     fa.clear();
 
-    ConcurrencyCaluate choose;
+    ValueCaluate choose;
     goodNext = choose.bestChildPro(chess);
     root = chess;
     mp.clear();
 
-    
+
     while (std::chrono::steady_clock::now() < endTime) {
     //while (chooseCnt <= selectNum) {
         chooseCnt++;
-        Chess selectPoint = treePolicy(chess, center, player); // 函数返回新的Chess和当前player
+        Chess selectPoint = Selection(chess, center, player); // 函数返回新的Chess和当前player
 
         for (int i = 1; i <= simulationNum; i++) {
             int newPlayer = (player == 1) ? 2 : 1;
-            Confun(selectPoint, newPlayer, chess);
+            int val = Simulation(selectPoint, newPlayer);  // 仿真
+            backUp(selectPoint, chess, val);           // 回溯
+
         }
     }
     IO::output_DEBUG("模拟次数   " + to_string(chooseCnt));
@@ -754,16 +765,15 @@ Chess MCTS::UCTsearch(Chess chess, std::pair<int, int> center, int player) {
 }
 
 
-void MCTS::defaultPolicy(Chess chess, int player, int& value) {
-    while (1)
+int MCTS::Simulation(Chess chess, int player) {
+    while (true)
     {
         if (GameModel::judgeAll(chess) || GameModel::is_terminate(chess))
             break;
         std::pair<int, int> h = calCenter(chess);
 
-        if (player == this->current_player)
-        {
-            ConcurrencyCaluate cal;
+        if (player == this->current_player) {
+            ValueCaluate cal;
             chess = cal.bestChildPro(chess);
             player = (player == 1 ? 2 : 1);
         }
@@ -771,29 +781,22 @@ void MCTS::defaultPolicy(Chess chess, int player, int& value) {
         // 这里开始随机下棋
         int randNum = rand() % 100;
         int i = 0, j = 0;
-        if (randNum < 50)
-        {
+        if (randNum < 50) {
             i = std::min(std::max(0, h.first - searchRange + rand() % (searchRange * 2 + 1)), boxNum);
             j = std::min(std::max(0, h.second - searchRange + rand() % (searchRange * 2 + 1)), boxNum);
         }
-        else
-        {
+        else {
             i = rand() % (boxNum + 1);
             j = rand() % (boxNum + 1);
         }
-        if (!chess.getChess(i, j))
-        {
+        if (!chess.getChess(i, j)) {
             chess.setChess(i, j, player);
             player = (player == 1 ? 2 : 1);
         }
     }
 
-    if (GameModel::judgeAll(chess) == current_opponent)
-        value = -1;
-    else if (GameModel::judgeAll(chess) == current_player)
-        value = 1;
-    else
-        value = 0;
+    int result = GameModel::judgeAll(chess);
+    return (result == current_opponent) ? -1 : (result == current_player) ? 1 : 0;
 }
 
 int main() {

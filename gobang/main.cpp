@@ -45,11 +45,20 @@ public:
     }
 
     // 测试 printf 哪个更快？ // \n 和 endl 那个更快？
-    static void output_OK() { cerr << "OK\n"; }
-    static void output_PLACE(const point p) {
-        cerr << (int)p.first << ' ' << (int)p.second << '\n';
+    static void output_OK() {
+        printf("OK\n");
+        fflush(stdout);
     }
-    static void output_DEBUG(const string& message) { cerr << "DEBUG " << message << '\n'; }
+
+    static void output_PLACE(const point p) {
+        printf("%d %d\n", p.first, p.second);
+        fflush(stdout);
+    }
+
+    static void output_DEBUG(const string& message) {
+        printf("DEBUG %s\n", message.c_str());
+        fflush(stdout);
+    }
 };
 
 class Chess
@@ -161,57 +170,6 @@ class GameModel
 public:
     GameModel() = default;
 
-    // 判断（x,y）处nowwhile是否赢
-    static bool judge(Chess chess, int x, int y, bool nowWhite) {
-        int count = 0;
-        int flag = nowWhite ? 1 : 2;
-        //横向
-        for (int i = ((x - 4) < 0 ? 0 : x - 4); i <= ((x + 4) > boxNum ? boxNum : x + 4); ++i) {
-            if (chess.getChess(i, y) == flag) count++;
-            else count = 0;
-            if (count == 5) return true;
-        }
-        //纵向
-        count = 0;
-        for (int j = ((y - 4) < 0 ? 0 : y - 4); j <= ((y + 4) > boxNum ? boxNum : y + 4); ++j) {
-            if (chess.getChess(x, j) == flag) count++;
-            else count = 0;
-            if (count == 5) return true;
-        }
-        //左下到右上
-        count = 0;
-        for (int i = ((x - 4) < 0 ? 0 : x - 4); i <= ((x + 4) > boxNum ? boxNum : x + 4); ++i) {
-            int yy = y + i - x;
-
-            if (yy < 0) continue;
-            else if (yy > boxNum) break;
-
-            if (chess.getChess(i, yy) == flag) count++;
-            else count = 0;
-            if (count == 5) return true;
-        }
-        //左上到右下
-        count = 0;
-        for (int i = ((x - 4) < 0 ? 0 : x - 4); i <= ((x + 4) > boxNum ? boxNum : x + 4); ++i)
-        {
-            int yy = y + x - i;
-
-            if (yy > boxNum)
-                continue;
-            else if (yy < 0)
-                break;
-
-            if (chess.getChess(i, yy) == flag)
-                count++;
-            else
-                count = 0;
-            if (count == 5)
-                return true;
-        }
-
-        return false;
-    }
-
     // 1代表黑棋赢，2代表白棋赢，0代表没结束
     static int judgeAll(Chess chess) {
         int x = chess.getLastPoint().first;
@@ -282,7 +240,7 @@ public:
     std::vector<Chess> vec;  // 关联的棋子
 };
 
-class ValueCaluate;
+class ValueAlgo;
 
 // 定义棋局状态的哈希函数
 struct ChessHash {
@@ -373,8 +331,8 @@ public:
 
                 // 找最佳的子节点进行下一层的搜索
                 for (auto it = mp[y].vec.begin(); it != mp[y].vec.end(); it++) {
-                    if (UCB(*it, player) >= maxn) {
-                        maxn = UCB(*it, player);
+                    if (UCT(*it, player) >= maxn) {
+                        maxn = UCT(*it, player);
                         chess = *it;
                     }
                 }
@@ -424,30 +382,27 @@ public:
     }
 
 
-    /// <summary>
-    /// bestChildPro()使用价值评估，不属于UCB，而bestChild()则是基于已有的搜索结果来选择最佳子节点。
-    /// </summary>
     Chess bestChild(Chess chess, int nowblack) {
         Chess ans = chess;
         double maxn = -std::numeric_limits<double>::infinity();
 
         for (auto it = mp[chess].vec.begin(); it != mp[chess].vec.end(); it++)
         {
-            if (UCB(*it, nowblack) >= maxn) {
-                maxn = UCB(*it, nowblack);
+            if (UCT(*it, nowblack) >= maxn) {
+                maxn = UCT(*it, nowblack);
                 ans = *it;
             }
         }
-        if (chooseCnt >= 25) // 这是在干什么 ？  这样会导致几乎选定的一定是goodNext  和搜索就没关系了
-        {
-            std::vector<Chess>::iterator iter = std::find(mp[root].vec.begin(), mp[root].vec.end(), goodNext);
-            if (iter == mp[root].vec.end()) // 如果预测的goodNext没有被随机模拟出来
-            {
-                mp[chess].vec.push_back(goodNext);
-                ///////////////tree.find(chess).addChild(goodNext);
-                ans = goodNext;
-            }
-        }
+        //if (chooseCnt >= 25) // 这是在干什么 ？  这样会导致几乎选定的一定是goodNext  和搜索就没关系了
+        //{
+        //    std::vector<Chess>::iterator iter = std::find(mp[root].vec.begin(), mp[root].vec.end(), goodNext);
+        //    if (iter == mp[root].vec.end()) // 如果预测的goodNext没有被随机模拟出来
+        //    {
+        //        mp[chess].vec.push_back(goodNext);
+        //        ///////////////tree.find(chess).addChild(goodNext);
+        //        ans = goodNext;
+        //    }
+        //}
 
         return ans;
     }
@@ -471,17 +426,7 @@ public:
     }
 
     /// @brief UCB值 计算用于选择下一个节点
-    double UCB(Chess chess, int player) {
-        if (mp[chess].mockNum == 0)
-            return 0;
-        double val = mp[chess].value, mocknum = mp[chess].mockNum;
-        if (val + mocknum == 0)
-            return -std::numeric_limits<double>::infinity();
-        if (player == current_player)    // black
-            return val / mocknum + sqrt(log(mocknum) / mocknum);
-        else // white
-            return -val / mocknum + sqrt(log(mocknum) / mocknum);
-    }
+    double UCT(Chess chess, int player);
 
 
     // 返回当前局面平均坐标
@@ -518,7 +463,7 @@ public:
     Chess goodNext; // 最好的下一步
 };
 
-class ValueCaluate
+class ValueAlgo
 {
 public:
 
@@ -526,7 +471,7 @@ public:
     std::vector<std::vector<int>> scoreMapVec; // 存储各个点位的评分情况，作为AI下棋依据
 
     // 大概思路：遍历所有的没有遍历所有没有下棋的点，然后计算每个点的评分，选择评分最高的点下棋
-    Chess bestChildPro(Chess chess) {
+    Chess ValueAssess(Chess chess) {
         MCTS::initDoubleVector(gameMapVec);
         MCTS::initDoubleVector(scoreMapVec);
 
@@ -722,39 +667,40 @@ public:
     }
 };
 
-
 Chess MCTS::UCTsearch(Chess chess, std::pair<int, int> center, int player) {
     // Get the starting time
     auto startTime = std::chrono::steady_clock::now();
-    auto endTime = startTime + std::chrono::duration<double>(1.5); // Set end time for 1.5 seconds
+    auto endTime = startTime + std::chrono::duration<double>(1.9); // Set end time for 1.9 seconds
 
     if (mp.find(chess) == mp.end())
         initChess(chess);
 
     fa.clear();
 
-    ValueCaluate choose;
-    goodNext = choose.bestChildPro(chess);
+    ValueAlgo choose;
+    goodNext = choose.ValueAssess(chess);
     root = chess;
     mp.clear();
 
 
     while (std::chrono::steady_clock::now() < endTime) {
-    //while (chooseCnt <= selectNum) {
         chooseCnt++;
-        Chess selectPoint = Selection(chess, center, player); // 函数返回新的Chess和当前player
+        Chess selectPoint = Selection(chess, center, player);   //////// UCT
+
+        // 新增的评估和权重调整
+        //double knowledgeWeight = choose.KnowledgeAssess(selectPoint, player);
+        //double adjustedUCTValue = UCTValue(selectPoint) * knowledgeWeight;
 
         for (int i = 1; i <= simulationNum; i++) {
             int newPlayer = (player == 1) ? 2 : 1;
-            int val = Simulation(selectPoint, newPlayer);  // 仿真
-            backUp(selectPoint, chess, val);           // 回溯
-
+            int val = Simulation(selectPoint, newPlayer);
+            backUp(selectPoint, chess, val);
         }
     }
-    IO::output_DEBUG("模拟次数   " + to_string(chooseCnt));
-    return bestChild(chess, player);
-}
 
+    IO::output_DEBUG("模拟次数   " + to_string(chooseCnt));
+    return bestChild(chess, player);        ///////////////// UCT
+}
 
 int MCTS::Simulation(Chess chess, int player) {
     while (true)
@@ -764,8 +710,8 @@ int MCTS::Simulation(Chess chess, int player) {
         std::pair<int, int> h = calCenter(chess);
 
         if (player == this->current_player) {
-            ValueCaluate cal;
-            chess = cal.bestChildPro(chess);
+            ValueAlgo cal;
+            chess = cal.ValueAssess(chess);
             player = (player == 1 ? 2 : 1);
         }
 
@@ -788,6 +734,18 @@ int MCTS::Simulation(Chess chess, int player) {
 
     int result = GameModel::judgeAll(chess);
     return (result == current_opponent) ? -1 : (result == current_player) ? 1 : 0;
+}
+
+double MCTS::UCT(Chess chess, int player) {
+    if (mp[chess].mockNum == 0)
+        return 0;
+    double val = mp[chess].value, mocknum = mp[chess].mockNum;
+    if (val + mocknum == 0) // 这代表每一次都输
+        return -std::numeric_limits<double>::infinity();
+    if (player == current_player)    // black win
+        return val / mocknum + sqrt(2 * log(mocknum) / mocknum);  // 参数是 2 还是多少？
+    else // white win
+        return -val / mocknum + sqrt(2 * log(mocknum) / mocknum); /// 为什么是负的 simulation 返回值有-1
 }
 
 int main() {

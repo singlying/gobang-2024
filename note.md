@@ -2,7 +2,7 @@
 
 IO：输入输出
 
-GameModel：没有成员变量，只提供几个工具函数检查游戏状态
+GameModel：没有实例对象，只提供几个工具函数检查游戏状态
 
 Properity：通过map和一个Chess映射，存储节点的属性值
 
@@ -10,9 +10,11 @@ MCTS：主要算法，通过接受Chess进行计算搜索
 
 Chess：存储当前棋盘的状态，以及最后一个落点
 
-ConcurrencyCaluate：和并发没有关系，给出了选择算法和价值评估的方法： 这是一个后加上的评估函数，使用专业知识进行评估  可以修改较多
+ValueAlgo：给出了选择算法和价值评估的方法： 这是一个后加上的评估函数，使用专业知识进行评估  可以修改较多
 
-# 待办事项
+
+
+# TO DO
 
 - √√√√√√√删除judgeAll()相关的代码，提高速度  
 
@@ -44,15 +46,37 @@ ConcurrencyCaluate：和并发没有关系，给出了选择算法和价值评�
   ​            <-    bestChild
 
 
+>严重问题：存在一些对局，在第一步棋阶段直接 timeout
+>
+>- 先手存在该情况  with  无敌霸王龙
+>- 猜测存在一些搜索的可能性导致了内在BUG！！！
+
 
 
 # 可能的优化方向
 
 - 根据先手后手进行优化
-- 缺乏终结比赛的能力![73063579523](C:\Users\asus\Desktop\gobang\gobang-2024\assets\1730635795239.png)
+- 缺乏终结比赛的能力
 
 
 
 # alpha  beta 优化
 
-- 剪枝       增加搜索深度和次数   
+## 剪枝       增加搜索深度和次数   
+
+## 启发式搜索
+
+## 策略评估函数：   
+
+​	当前问题：原程序中 white 为0   black为1   可能会产生问题
+
+- 没有用到的源程序中的函数：
+  - TypeCount()  统计各种棋形的数量
+
+
+
+AI类函数调用关系：
+
+BestMove  ->  SearchBest   ->    RootSearch   ->    AlphaBeta()递归函数  ->     NextMove()   ->    GenerateMove()  ->    EvaluateMove
+
+​																			Evaluate  ?

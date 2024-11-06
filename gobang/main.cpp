@@ -28,6 +28,17 @@ using namespace std;
 
 constexpr static int boxNum = 11;
 
+// 棋形  for ValueAlgo
+#define FIVE 7					// 成五
+#define LIVEFOUR 6				// 活四
+#define RUSHFOUR 5				// 冲四
+#define LIVETHREE 4				// 活四
+#define SLEEPTHREE 3			// 眠三
+#define LIVETWO 2				// 活二
+#define SLEEPTWO 1				// 眠二
+
+#define Empty 2 // 这个是别人的代码定义  先暂时这么写   等下再改
+
 // 输入输出
 class IO {
 public:
@@ -36,87 +47,36 @@ public:
         { {"START", START}, {"PLACE", PLACE}, {"TURN", TURN} };
 
         auto it = commandMap.find(command);
-        if (it != commandMap.end()) {
-            return it->second;  // 返回对应的宏值
-        }
-        else {
-            return END;  // 未找到指令返回 END
-        }
+        if (it != commandMap.end()) return it->second;  // 返回对应的宏值
+        else return END;  // 未找到指令返回 END
     }
 
-    // 测试 printf 哪个更快？ // \n 和 endl 那个更快？
-    static void output_OK() {
-        printf("OK\n");
-        fflush(stdout);
-    }
+    static void output_OK() { printf("OK\n"); fflush(stdout); }
+    static void output_PLACE(const point p) { printf("%d %d\n", p.first, p.second); fflush(stdout); }
+    static void output_DEBUG(const string& message) { printf("DEBUG %s\n", message.c_str()); fflush(stdout); }
 
-    static void output_PLACE(const point p) {
-        printf("%d %d\n", p.first, p.second);
-        fflush(stdout);
-    }
-
-    static void output_DEBUG(const string& message) {
-        printf("DEBUG %s\n", message.c_str());
-        fflush(stdout);
-    }
+    IO() = delete;
 };
 
 class Chess
 {
 private:
-    int gomoku[boxNum + 1][boxNum + 1];
-    std::pair<int, int> lastPoint;
-
+    std::vector<std::vector<int>> gomoku;
+    point lastPoint;
+    vector<vector<vector<vector<int>>>> pattern; // 存储棋盘单个点的棋形  2个player 4各方向
     friend struct ChessHash;
 
 public:
-    void setChess(int x, int y, int player) {
-        gomoku[x][y] = player;
-        lastPoint = std::make_pair(x, y);
-    }
+    // 对外接口
+    void setChess(int x, int y, int player) { gomoku[x][y] = player; lastPoint = std::make_pair(x, y); }
+    int getChess(int x, int y) const { return gomoku[x][y]; }
+    int& getpattern(int x, int y, int player, int direction) { return pattern[x][y][player][direction]; }
+    point getLastPoint() const { return lastPoint; }
+    std::vector<std::vector<int>> getGomoku() const { return this->gomoku; }
 
-    int getChess(int x, int y) {
-        return gomoku[x][y];
-    }
-
-    /// 返回最后一次下的棋子坐标
-    std::pair<int, int> getLastPoint() {
-        return lastPoint;
-    }
-
-    std::vector<std::vector<int>> convertGomokuToVec() const {
-        std::vector<std::vector<int>> temp;
-
-        temp.clear();
-        for (int i = 0; i <= boxNum; i++)
-        {
-            std::vector<int> lineBoard;
-            for (int j = 0; j <= boxNum; j++)
-                lineBoard.push_back(0);
-            temp.push_back(lineBoard);
-        }
-
-
-        for (int i = 0; i <= boxNum; i++)
-            for (int j = 0; j <= boxNum; j++)
-            {
-                if (gomoku[i][j] == 1)
-                    temp[i][j] = 1;
-                else if (gomoku[i][j] == 2)
-                    temp[i][j] = -1;
-                else
-                    temp[i][j] = 0;
-            }
-        return temp;
-    }
-
-public:
-    Chess() {
+    Chess(): gomoku(boxNum, std::vector<int>(boxNum + 1, 0)), 
+    pattern(BOARD_SIZE, vector<vector<vector<int>>>(BOARD_SIZE, vector<vector<int>>(2, vector<int>(4)))) {
         lastPoint = std::make_pair(0, 0);
-
-        for (int i = 0; i < boxNum + 1; ++i)
-            for (int j = 0; j < boxNum + 1; ++j)
-                gomoku[i][j] = 0;
 
         gomoku[5][5] = WHITE;
         gomoku[5][6] = BLACK;
@@ -127,7 +87,7 @@ public:
     }
 
     Chess(int rgomoku[boxNum + 1][boxNum + 1]) {
-        lastPoint = std::make_pair(0, 0);
+        lastPoint = std::make_pair(-1, -1);
 
         for (int i = 0; i < boxNum + 1; ++i)
             for (int j = 0; j < boxNum + 1; ++j)
@@ -177,7 +137,7 @@ public:
         int player = chess.getChess(x, y);
 
         // 定义四个方向
-        const std::vector<std::pair<int, int>> directions = {
+        const std::vector<point> directions = {
             {1, 0}, {0, 1}, {1, 1}, {1, -1}
         };
 
@@ -240,9 +200,9 @@ public:
     std::vector<Chess> vec;  // 关联的棋子
 };
 
-class ValueAlgo;
+// class ValueAlgo;
 
-// 定义棋局状态的哈希函数
+// 定义棋局状态的哈希函数  当前并没有启用ChessHash **
 struct ChessHash {
     std::size_t operator()(const Chess& chess) const {
         // 使用 std::hash 计算棋盘状态的哈希值
@@ -303,10 +263,10 @@ public:
 
     // 实现树的搜索，返回最优的落子位置
     /// 搜索函数传入的是原来那个chess
-    Chess UCTsearch(Chess chess, std::pair<int, int> center, int player);
+    Chess UCTsearch(Chess chess, point center, int player);
 
     /// @brief 选择
-    Chess Selection(Chess chess, std::pair<int, int> center, int player) {
+    Chess Selection(Chess chess, point center, int player) {
 
         while (!GameModel::is_terminate(chess) && !GameModel::judgeAll(chess)) // 这里可以删除掉
         {
@@ -325,7 +285,7 @@ public:
                 if (mp[y].vec.size() == 0) {
                     IO::output_DEBUG("treePolicy() error：当前范围内所有节点都被扩展过，但当前节点没有子节点");
                     break;
-                }// 这一步是不能被执行的 否则没有返回值了  
+                }// 这一步是不能被执行的 否则没有返回值了
 
                 double maxn = -std::numeric_limits<double>::infinity();
 
@@ -342,9 +302,9 @@ public:
         }
     }
 
-    /// @brief 扩展
+    // 扩展
     /// @attention 目前只有5*5的范围内搜索，搜索100000次，如果运气非常非常非常非常不好就expand不到那1/25的点~
-    Chess expandNode(Chess chess, std::pair<int, int> center, int player) {
+    Chess expandNode(Chess chess, point center, int player) {
         Chess y = chess;
 
         int x1 = std::max(0, center.first - searchRange);
@@ -381,7 +341,6 @@ public:
         }
     }
 
-
     Chess bestChild(Chess chess, int nowblack) {
         Chess ans = chess;
         double maxn = -std::numeric_limits<double>::infinity();
@@ -407,10 +366,10 @@ public:
         return ans;
     }
 
-    /// @brief 模拟    游戏至结束，黑色赢返回1，白色返回-1，和棋返回0
+    // 模拟    游戏至结束，黑色赢返回1，白色返回-1，和棋返回0
     int Simulation(Chess chess, int nowblack);
 
-    /// @brief 回退
+    // 回退
     void backUp(Chess child, Chess origin, int value) {
         mp[child].value += value;
         mp[child].mockNum++;
@@ -425,12 +384,11 @@ public:
         }
     }
 
-    /// @brief UCB值 计算用于选择下一个节点
+    // UCT值 计算用于选择下一个节点
     double UCT(Chess chess, int player);
 
-
     // 返回当前局面平均坐标
-    static std::pair<int, int> calCenter(Chess chess) {
+    static point calCenter(Chess chess) {
         int cnt = 0, p1 = 0, p2 = 0;
         for (int i = 0; i <= boxNum; i++)
             for (int j = 0; j <= boxNum; j++)
@@ -466,230 +424,300 @@ public:
 class ValueAlgo
 {
 public:
+    // 方向向量
+    const int X[4] = { 1, 0, 1, 1 };
+    const int Y[4] = { 0, 1, 1, -1 };
 
-    std::vector<std::vector<int>> gameMapVec; // 存储当前游戏棋盘和棋子的情况,空白为0，白子1，黑子-1
-    std::vector<std::vector<int>> scoreMapVec; // 存储各个点位的评分情况，作为AI下棋依据
+    static int typeAssistanceTable[10][6][6][3];         // 棋型判断辅助表
+    static int patternTable[65536][2];                   // 棋型表
+    static int moveEvaluateTable[8][8][8][8];            // 走法评价表
 
-    // 大概思路：遍历所有的没有遍历所有没有下棋的点，然后计算每个点的评分，选择评分最高的点下棋
-    Chess ValueAssess(Chess chess) {
-        MCTS::initDoubleVector(gameMapVec);
-        MCTS::initDoubleVector(scoreMapVec);
+    ValueAlgo() = delete; // 禁止实例化
 
-        gameMapVec = chess.convertGomokuToVec();
-        calculateScore();
+    // 更新棋型
+    static void UpdateType(Chess& chess, int row, int col) {
+        int a, b;
+        int key;
 
-        // 从评分中找出最大分数的位置
-        int maxScore = 0;
-        std::vector<std::pair<int, int>> maxPoints;
-
-        for (int row = 0; row <= boxNum; row++)
-            for (int col = 0; col <= boxNum; col++)
+        for (int i = 0; i < 4; ++i)
+        {
+            a = row + X[i];
+            b = col + Y[i];
+            for (int j = 0; j < 4 && a >= 0 && b >= 0 && a < BOARD_SIZE && b < BOARD_SIZE; a += X[i], b += Y[i], ++j)
             {
-                // 前提是这个坐标是空的
-                if (gameMapVec[row][col] == 0)
-                {
-                    if (scoreMapVec[row][col] > maxScore)          // 找最大的数和坐标
-                    {
-                        maxPoints.clear();
-                        maxScore = scoreMapVec[row][col];
-                        maxPoints.push_back(std::make_pair(row, col));
-                    }
-                    else if (scoreMapVec[row][col] == maxScore)     // 如果有多个最大的数，都存起来
-                        maxPoints.push_back(std::make_pair(row, col));
-                }
+                key = GetKeyValue(chess, a, b, i);
+                chess.getpattern(a, b, 0, i) = patternTable[key][0];
+                chess.getpattern(a, b, 1, i) = patternTable[key][1];
             }
-
-        int index = rand() % maxPoints.size(); // 从多个最大的数中 随机挑选一个
-
-        std::pair<int, int> pointPair = maxPoints.at(index);
-
-        chess.setChess(pointPair.first, pointPair.second, 2); // AI棋子
-
-        return chess;
+            a = row - X[i];
+            b = col - Y[i];
+            for (int k = 0; k < 4 && a >= 0 && b >= 0 && a < BOARD_SIZE && b < BOARD_SIZE; a -= X[i], b -= Y[i], ++k)
+            {
+                key = GetKeyValue(chess, a, b, i);
+                chess.getpattern(a, b, 0, i) = patternTable[key][0];
+                chess.getpattern(a, b, 1, i) = patternTable[key][1];
+            }
+        }
     }
 
-    /// @brief 价值算法
-    void calculateScore() {
-        // 统计玩家或者电脑连成的子
-        int oppNum = 0; // 玩家连成子的个数
-        int myNum = 0; // AI连成子的个数
-        int emptyNum = 0; // 各方向空白位的个数
+    // 获取该位置的key编码  row,col : 棋盘位置的坐标  i : 四个方向
+    static int GetKeyValue(const Chess& chess, int row, int col, int i) {
+        const int stepX = X[i];
+        const int stepY = Y[i];
+        int key = (chess.getChess(row - stepX * 4, col - stepY * 4))
+            ^ (chess.getChess(row - stepX * 3, col - stepY * 3) << 2)
+            ^ (chess.getChess(row - stepX * 2, col - stepY * 2) << 4)
+            ^ (chess.getChess(row - stepX * 1, col - stepY * 1) << 6)
+            ^ (chess.getChess(row + stepX * 1, col + stepY * 1) << 8)
+            ^ (chess.getChess(row + stepX * 2, col + stepY * 2) << 10)
+            ^ (chess.getChess(row + stepX * 3, col + stepY * 3) << 12)
+            ^ (chess.getChess(row + stepX * 4, col + stepY * 4) << 14);
 
+        return key;
+    }
 
-        // 计分（此处是完全遍历，其实可以用bfs或者dfs加减枝降低复杂度，通过调整权重值，调整AI智能程度以及攻守风格）
-        for (int row = 0; row <= boxNum; row++)
-            for (int col = 0; col <= boxNum; col++)
+    // 获取走法的价值 a,b,c,d : 四个方向的棋型   /////////////////// 这个函数需要修改  和UCT算法的权值进行匹配
+    static int GetPval(int a, int b, int c, int d) {
+        int type[8] = { 0 };
+        type[a]++; type[b]++; type[c]++; type[d]++;
+
+        if (type[FIVE] > 0)
+            return 5000;
+        if (type[LIVEFOUR] > 0 || type[RUSHFOUR] > 1)
+            return 1200;
+        if (type[RUSHFOUR] > 0 && type[LIVETHREE] > 0)
+            return 1000;
+        if (type[LIVETHREE] > 1)
+            return 200;
+
+        int value[6] = { 0, 2, 5, 5, 12, 12 };
+        int score = 0;
+        for (int i = 1; i <= RUSHFOUR; i++)
+        {
+            score += value[i] * type[i];
+        }
+
+        return score;
+    }
+
+    // 获取棋型 key : 共16位,每两位存储该位置的状态：黑、白、空、棋盘外  color : 表示要判断哪一方的棋型：黑或白
+    // 判断key棋型，填充棋型表
+    static int LineType(int color, int key) {
+        int line_left[9];
+        int line_right[9];
+
+        for (int i = 0; i < 9; i++)
+        {
+            if (i == 4)
             {
-                // 空白点就算
-                if (row > 0 && col > 0 && gameMapVec[row][col] == 0)
+                line_left[i] = color;
+                line_right[i] = color;
+            }
+            else
+            {
+                line_left[i] = key & 3;
+                line_right[8 - i] = key & 3;
+                key >>= 2;
+            }
+        }
+
+        // 从左往右判断，然后从右往左判断
+        int p1 = ShortLine(line_left);
+        int p2 = ShortLine(line_right);
+
+        // 如果两个方向都是眠三，有可能是活三，复查
+        if (p1 == SLEEPTHREE && p2 == SLEEPTHREE)
+        {
+            return CheckThreeType(line_left);
+        }
+        // 如果两个方向都是眠四，有可能是活四，复查
+        else if (p1 == RUSHFOUR && p2 == RUSHFOUR)
+        {
+            return CheckFourType(line_left);
+        }
+        // 返回二者中最大那个
+        else
+        {
+            return p1 > p2 ? p1 : p2;
+        }
+    }
+
+    // 判断棋型
+    static int ShortLine(int* line) {
+        int empty = 0, block = 0;
+        int len = 1, len_back = 1, count = 1;
+        int k;
+
+        int player = line[4];
+        for (k = 5; k <= 8; k++)
+        {
+            if (line[k] == player)
+            {
+                if (empty + count > 4)
+                    break;
+                ++count;
+                ++len;
+                len_back = empty + count;
+            }
+            else if (line[k] == Empty)
+            {
+                ++len;
+                ++empty;
+            }
+            else
+            {
+                if (line[k - 1] == player)
                 {
-                    // 遍历周围八个方向
-                    for (int y = -1; y <= 1; y++)
-                        for (int x = -1; x <= 1; x++)
-                        {
-                            // 重置
-                            oppNum = 0;
-                            myNum = 0;
-                            emptyNum = 0;
+                    block++;
+                }
+                break;
+            }
+        }
+        // 计算中间空格
+        empty = len_back - count;
+        for (k = 3; k >= 0; k--)
+        {
+            if (line[k] == player)
+            {
+                if (empty + count > 4)
+                    break;
+                ++count;
+                ++len;
+                len_back = empty + count;
+            }
+            else if (line[k] == Empty)
+            {
+                ++len;
+                ++empty;
+            }
+            else
+            {
+                if (line[k + 1] == player)
+                {
+                    block++;
+                }
+                break;
+            }
+        }
+        return typeAssistanceTable[len][len_back][count][block];
+    }
+    static int CheckThreeType(int* line) {     // 判断是活三还是眠三
+        int color = line[4];
+        int type;
+        for (int i = 0; i < 9; i++)
+        {
+            if (line[i] == Empty)
+            {
+                line[i] = color;
+                type = CheckFourType(line);
+                line[i] = Empty;
+                if (type == LIVEFOUR)
+                    return LIVETHREE;
+            }
+        }
+        return SLEEPTHREE;
+    }
+    static int CheckFourType(int* line) {      // 判断是活四还是眠四
+        int i, j, count;
 
-                            // 原坐标不算
-                            if (!(y == 0 && x == 0))
-                            {
-                                // 每个方向延伸4个子
+        int five = 0;
+        int color = line[4];
+        for (i = 0; i < 9; i++)
+        {
+            if (line[i] == Empty)
+            {
+                count = 0;
+                for (j = i - 1; j >= 0 && line[j] == color; j--)
+                    count++;
+                for (j = i + 1; j <= 8 && line[j] == color; j++)
+                    count++;
+                if (count >= 4)
+                    five++;
+            }
+        }
+        // 如果有两个空位置能成五，就是活四
+        return five >= 2 ? LIVEFOUR : RUSHFOUR;
+    }
 
-                                // 对玩家白子评分（正反两个方向）
-                                for (int i = 1; i <= 4; i++)
-                                {
-                                    if (row + i * y >= 0 && row + i * y <= boxNum &&
-                                        col + i * x >= 0 && col + i * x <= boxNum &&
-                                        gameMapVec[row + i * y][col + i * x] == 1) // 玩家的子
-                                    {
-                                        oppNum++;
-                                    }
-                                    else if (row + i * y >= 0 && row + i * y <= boxNum &&
-                                        col + i * x >= 0 && col + i * x <= boxNum &&
-                                        gameMapVec[row + i * y][col + i * x] == 0) // 空白位
-                                    {
-                                        emptyNum++;
-                                        break;
-                                    }
-                                    else            // 出边界
-                                        break;
-                                }
-
-                                for (int i = 1; i <= 4; i++)
-                                {
-                                    if (row - i * y >= 0 && row - i * y <= boxNum &&
-                                        col - i * x >= 0 && col - i * x <= boxNum &&
-                                        gameMapVec[row - i * y][col - i * x] == 1) // 玩家的子
-                                    {
-                                        oppNum++;
-                                    }
-                                    else if (row - i * y >= 0 && row - i * y <= boxNum &&
-                                        col - i * x >= 0 && col - i * x <= boxNum &&
-                                        gameMapVec[row - i * y][col - i * x] == 0) // 空白位
-                                    {
-                                        emptyNum++;
-                                        break;
-                                    }
-                                    else            // 出边界
-                                        break;
-                                }
-
-                                if (oppNum == 1)                      // 杀二
-                                    scoreMapVec[row][col] += 10;
-                                else if (oppNum == 2)                 // 杀三
-                                {
-                                    if (emptyNum == 1)
-                                        scoreMapVec[row][col] += 30;
-                                    else if (emptyNum == 2)
-                                        scoreMapVec[row][col] += 40;
-                                }
-                                else if (oppNum == 3)                 // 杀四
-                                {
-                                    // 量变空位不一样，优先级不一样
-                                    if (emptyNum == 1)
-                                        scoreMapVec[row][col] += 60;
-                                    else if (emptyNum == 2)
-                                        scoreMapVec[row][col] += 110;
-                                }
-                                else if (oppNum == 4)                 // 杀五
-                                    scoreMapVec[row][col] += 10100;
-
-                                // 进行一次清空
-                                emptyNum = 0;
-
-                                // 对AI黑子评分
-                                for (int i = 1; i <= 4; i++)
-                                {
-                                    if (row + i * y >= 0 && row + i * y <= boxNum &&
-                                        col + i * x >= 0 && col + i * x <= boxNum &&
-                                        gameMapVec[row + i * y][col + i * x] == 1) // 玩家的子
-                                    {
-                                        myNum++;
-                                    }
-                                    else if (row + i * y >= 0 && row + i * y <= boxNum &&
-                                        col + i * x >= 0 && col + i * x <= boxNum &&
-                                        gameMapVec[row + i * y][col + i * x] == 0) // 空白位
-                                    {
-                                        emptyNum++;
-                                        break;
-                                    }
-                                    else            // 出边界
-                                        break;
-                                }
-
-                                for (int i = 1; i <= 4; i++)
-                                {
-                                    if (row - i * y >= 0 && row - i * y <= boxNum &&
-                                        col - i * x >= 0 && col - i * x <= boxNum &&
-                                        gameMapVec[row - i * y][col - i * x] == -1) // AI的子
-                                    {
-                                        myNum++;
-                                    }
-                                    else if (row - i * y >= 0 && row - i * y <= boxNum &&
-                                        col - i * x >= 0 && col - i * x <= boxNum &&
-                                        gameMapVec[row - i * y][col - i * x] == 0) // 空白位
-                                    {
-                                        emptyNum++;
-                                        break;
-                                    }
-                                    else            // 出边界
-                                        break;
-                                }
-
-                                if (myNum == 0)                      // 普通下子
-                                    scoreMapVec[row][col] += 5;
-                                else if (myNum == 1)                 // 活二
-                                    scoreMapVec[row][col] += 10;
-                                else if (myNum == 2)
-                                {
-                                    if (emptyNum == 1)                // 死三
-                                        scoreMapVec[row][col] += 25;
-                                    else if (emptyNum == 2)
-                                        scoreMapVec[row][col] += 50;  // 活三
-                                }
-                                else if (myNum == 3)
-                                {
-                                    if (emptyNum == 1)                // 死四
-                                        scoreMapVec[row][col] += 55;
-                                    else if (emptyNum == 2)
-                                        scoreMapVec[row][col] += 100; // 活四
-                                }
-                                else if (myNum >= 4)
-                                    scoreMapVec[row][col] += 10000;   // 活五
-
-                            }
-                        }
-
+    // 生成棋型辅助表
+    static int ChessTypeAssistance(int len, int len_back, int count, int block) {
+        if (len >= 5 && count > 1)
+        {
+            if (count == 5)
+            {
+                return FIVE;
+            }
+            if (len > 5 && len_back < 5 && block == 0)
+            {
+                switch (count)
+                {
+                    case 2:
+                        return LIVETWO;
+                    case 3:
+                        return LIVETHREE;
+                    case 4:
+                        return LIVEFOUR;
                 }
             }
+            else
+            {
+                switch (count)
+                {
+                    case 2:
+                        return SLEEPTWO;
+                    case 3:
+                        return SLEEPTHREE;
+                    case 4:
+                        return RUSHFOUR;
+                }
+            }
+        }
+        return 0;
+    }
+
+    // 主函数
+    static void initValueAlgo() {
+        // 初始化棋型辅助表
+        for (int i = 5; i < 10; ++i) {
+            for (int j = 0; j < 6; ++j) {
+                for (int k = 1; k < 6; ++k) {
+                    for (int l = 0; l < 3; ++l) {
+                        typeAssistanceTable[i][j][k][l] = ChessTypeAssistance(i, j, k, l);
+                    }
+                }
+            }
+        }
+        //初始化棋型表
+        for (int key = 0; key < 65536; key++) {
+            patternTable[key][0] = LineType(0, key);
+            patternTable[key][1] = LineType(1, key);
+        }
+        //初始化走法评价表
+        for (int i = 0; i < 8; ++i) {
+            for (int j = 0; j < 8; ++j) {
+                for (int k = 0; k < 8; ++k) {
+                    for (int l = 0; l < 8; ++l) {
+                        moveEvaluateTable[i][j][k][l] = GetPval(i, j, k, l);
+                    }
+                }
+            }
+        }
     }
 };
 
-Chess MCTS::UCTsearch(Chess chess, std::pair<int, int> center, int player) {
+Chess MCTS::UCTsearch(Chess chess, point center, int player) {
     // Get the starting time
     auto startTime = std::chrono::steady_clock::now();
     auto endTime = startTime + std::chrono::duration<double>(1.9); // Set end time for 1.9 seconds
 
-    if (mp.find(chess) == mp.end())
-        initChess(chess);
-
     fa.clear();
 
-    ValueAlgo choose;
-    goodNext = choose.ValueAssess(chess);
     root = chess;
     mp.clear();
-
 
     while (std::chrono::steady_clock::now() < endTime) {
         chooseCnt++;
         Chess selectPoint = Selection(chess, center, player);   //////// UCT
-
-        // 新增的评估和权重调整
-        //double knowledgeWeight = choose.KnowledgeAssess(selectPoint, player);
-        //double adjustedUCTValue = UCTValue(selectPoint) * knowledgeWeight;
 
         for (int i = 1; i <= simulationNum; i++) {
             int newPlayer = (player == 1) ? 2 : 1;
@@ -698,7 +726,7 @@ Chess MCTS::UCTsearch(Chess chess, std::pair<int, int> center, int player) {
         }
     }
 
-    IO::output_DEBUG("模拟次数   " + to_string(chooseCnt));
+    IO::output_DEBUG("sining's code simulation time" + to_string(chooseCnt));
     return bestChild(chess, player);        ///////////////// UCT
 }
 
@@ -707,11 +735,11 @@ int MCTS::Simulation(Chess chess, int player) {
     {
         if (GameModel::judgeAll(chess) || GameModel::is_terminate(chess))
             break;
-        std::pair<int, int> h = calCenter(chess);
+        point h = calCenter(chess);
 
         if (player == this->current_player) {
             ValueAlgo cal;
-            chess = cal.ValueAssess(chess);
+            chess = cal.ValueAssess(chess); ///// ????
             player = (player == 1 ? 2 : 1);
         }
 
@@ -782,14 +810,15 @@ int main() {
                 break;
             case TURN: {
                 // 执行需要计时的代码块
+                ValueAlgo::initValueAlgo();
+
                 chess = mcts.UCTsearch(chess, chess.getLastPoint(), player);
                 IO::output_PLACE(make_pair(chess.getLastPoint().first, chess.getLastPoint().second));
 
                 // 结束计时
                 auto endTime = std::chrono::high_resolution_clock::now();
                 auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime);
-                IO::output_DEBUG("代码执行时间（毫秒）: " + to_string(duration.count()));
-
+                IO::output_DEBUG("singing's code run time(ms): " + to_string(duration.count()));
 
                 break;
             }

@@ -70,11 +70,12 @@ public:
     // 对外接口
     void setChess(int x, int y, int player) { gomoku[x][y] = player; lastPoint = std::make_pair(x, y); }
     int getChess(int x, int y) const { return gomoku[x][y]; }
+    bool isValidMove(int x, int y) const { return gomoku[x][y] == 0; }
     int& getpattern(int x, int y, int player, int direction) { return pattern[x][y][player][direction]; }
     point getLastPoint() const { return lastPoint; }
     std::vector<std::vector<int>> getGomoku() const { return this->gomoku; }
 
-    Chess(): gomoku(boxNum, std::vector<int>(boxNum + 1, 0)), 
+    Chess(): gomoku(BOARD_SIZE, std::vector<int>(BOARD_SIZE, 0)), 
     pattern(BOARD_SIZE, vector<vector<vector<int>>>(BOARD_SIZE, vector<vector<int>>(2, vector<int>(4)))) {
         lastPoint = std::make_pair(0, 0);
 
@@ -129,6 +130,8 @@ class GameModel
 {
 public:
     GameModel() = default;
+
+    static int getopponent(int player) { return player == BLACK ? WHITE : BLACK; }
 
     // 1代表黑棋赢，2代表白棋赢，0代表没结束
     static int judgeAll(Chess chess) {
@@ -195,8 +198,8 @@ public:
 class Properity
 {
 public:
-    double mockNum; // 模拟次数
-    double value; // 节点价值
+    double visits; // 模拟次数
+    double wins; // 节点价值
     std::vector<Chess> vec;  // 关联的棋子
 };
 
@@ -244,7 +247,7 @@ public:
     // 初始化棋局
     void initChess(Chess chess) {
         Properity p;
-        p.value = 0, p.mockNum = 0;
+        p.wins = 0, p.visits = 0;
         mp[chess] = p;
     }
     static void initDoubleVector(std::vector<std::vector<int>>& rhs) {
@@ -265,9 +268,10 @@ public:
     /// 搜索函数传入的是原来那个chess
     Chess UCTsearch(Chess chess, point center, int player);
 
+    point UCTsearch2(Chess chess, int player);
+
     /// @brief 选择
     Chess Selection(Chess chess, point center, int player) {
-
         while (!GameModel::is_terminate(chess) && !GameModel::judgeAll(chess)) // 这里可以删除掉
         {
             int x1 = std::max(0, center.first - searchRange);
@@ -301,6 +305,22 @@ public:
             player = (player == 1 ? 2 : 1);
         }
     }
+    Chess Selection2(Chess chess, int player) {
+        while (!mp[chess].vec.empty()) {
+            Chess currentNode = chess;
+            double maxn = -std::numeric_limits<double>::infinity();
+            for (auto it = mp[currentNode].vec.begin(); it != mp[currentNode].vec.end(); it++) {
+                int uct = UCT2(chess, *it, player);
+                if (uct >= maxn) {
+                    maxn = uct;
+                    chess = *it;
+                }
+                fa[chess] = currentNode;
+            }
+        }
+        return chess;
+
+    }
 
     // 扩展
     /// @attention 目前只有5*5的范围内搜索，搜索100000次，如果运气非常非常非常非常不好就expand不到那1/25的点~
@@ -324,7 +344,7 @@ public:
                 if (goodNext == y) // 特殊情况  如果当前要扩展的节点刚好是现在最佳的节点，则提高其优先级
                 {
                     initChess(y);
-                    mp[y].value += 1000;
+                    mp[y].wins += 1000;
                     mp[chess].vec.push_back(goodNext);
                     fa[y] = chess;
                     return y;
@@ -338,6 +358,115 @@ public:
             }
             y.setChess(i, j, o);
             putCnt++;
+        }
+    }
+
+    void expandNode2(Chess chess, int player) { // 这个实现中没有center中心计算
+        for (int i = 0; i < BOARD_SIZE; i++) {
+            for (int j = 0; j < BOARD_SIZE; j++) {
+                if (chess.isValidMove(i, j)) {
+                    Chess newnode = chess;
+                    newnode.setChess(i, j, GameModel::getopponent(player));
+                    initChess(newnode);
+
+                    //if (mp.find(chess) == mp.end())
+                    //    throw "error : mp.find(chess) == mp.end()";
+
+                    mp[chess].vec.push_back(newnode);
+                    fa[newnode] = chess;
+                }
+            }
+        }
+    }
+
+    // 模拟    游戏至结束，黑色赢返回1，白色返回-1，和棋返回0
+    int Simulation(Chess chess, int player) {
+        while (true) {
+            if (GameModel::judgeAll(chess) || GameModel::is_terminate(chess))
+                break;
+
+            point h = calCenter(chess);
+
+            //if (player == this->current_player) {
+            //    ValueAlgo cal;
+            //    chess = cal.ValueAssess(chess); ///// ????
+            //    player = (player == 1 ? 2 : 1);
+            //}
+
+            // 这里开始随机下棋
+            int randNum = rand() % 100;
+            int i = 0, j = 0;
+            if (randNum < 50) {
+                i = std::min(std::max(0, h.first - searchRange + rand() % (searchRange * 2 + 1)), boxNum);
+                j = std::min(std::max(0, h.second - searchRange + rand() % (searchRange * 2 + 1)), boxNum);
+            }
+            else {
+                i = rand() % (boxNum + 1);
+                j = rand() % (boxNum + 1);
+            }
+            if (!chess.getChess(i, j)) {
+                chess.setChess(i, j, player);
+                player = (player == 1 ? 2 : 1);
+            }
+        }
+
+        int result = GameModel::judgeAll(chess);
+        return (result == current_opponent) ? -1 : (result == current_player) ? 1 : 0;
+    }
+
+    int Simulation2(Chess chess, int player) {
+        Chess currentNode = chess;
+        int currentplayer = player;
+        while (true) {
+            vector<point> validMoves;
+            for (int i = 0; i < BOARD_SIZE; i++) {
+                for (int j = 0; j < BOARD_SIZE; j++) {
+                    if (currentNode.isValidMove(i, j)) {
+                        validMoves.push_back(point(i, j));
+                    }
+                }
+            }
+
+            if (validMoves.empty()) break;
+
+            int randIndex = rand() % validMoves.size(); // 随机模拟
+            point move = validMoves[randIndex];
+            currentNode.setChess(move.first, move.second, currentplayer);
+
+            int result = GameModel::judgeAll(currentNode);
+            if (result != 0) return result;
+
+            currentplayer = (currentplayer == BLACK ? WHITE : BLACK);
+        }
+        
+        return 0; // 平局
+    }
+
+    // 回退
+    void backUp(Chess child, Chess root, int wins) {
+        mp[child].wins += wins;
+        mp[child].visits++;
+        while (!(child == root))
+        {
+            if (fa.find(child) == fa.end())
+                break;
+            child = fa[child];
+
+            mp[child].wins += wins;
+            mp[child].visits++;
+        }
+    }
+
+    void backUp2(Chess child, Chess root, int wins) {
+        mp[child].wins += wins;
+        mp[child].visits++;
+        while (!(child == root)) {
+            if (fa.find(child) == fa.end())
+                break;
+            child = fa[child];
+
+            mp[child].wins += wins;
+            mp[child].visits++;
         }
     }
 
@@ -366,26 +495,30 @@ public:
         return ans;
     }
 
-    // 模拟    游戏至结束，黑色赢返回1，白色返回-1，和棋返回0
-    int Simulation(Chess chess, int nowblack);
-
-    // 回退
-    void backUp(Chess child, Chess origin, int value) {
-        mp[child].value += value;
-        mp[child].mockNum++;
-        while (!(child == origin))
-        {
-            if (fa.find(child) == fa.end())
-                break;
-            child = fa[child];
-
-            mp[child].value += value;
-            mp[child].mockNum++;
-        }
+    // UCT值 计算用于选择下一个节点
+    double UCT(Chess chess, int player) {
+        if (mp[chess].visits == 0)
+            return 0;
+        double wins = mp[chess].wins, visits = mp[chess].visits;
+        if (wins + visits == 0) // 这代表每一次都输
+            return -std::numeric_limits<double>::infinity();
+        if (player == current_player)    // black win
+            return wins / visits + sqrt(2 * log(visits) / visits);  // 参数是 2 还是多少？
+        else // white win
+            return -wins / visits + sqrt(2 * log(visits) / visits); /// 为什么是负的 simulation 返回值有-1
     }
 
-    // UCT值 计算用于选择下一个节点
-    double UCT(Chess chess, int player);
+    double UCT2(Chess fa, Chess child, int player) {
+        if (mp[child].visits == 0)
+            return 0;
+        double child_wins = mp[child].wins, child_visits = mp[child].visits;
+        double fa_visits = mp[fa].visits;
+        if (player == current_player)
+            return child_wins / child_visits + sqrt(2 * log(fa_visits) / child_visits);
+        else 
+            return -child_wins / child_visits + sqrt(2 * log(fa_visits) / child_visits);
+        
+    }
 
     // 返回当前局面平均坐标
     static point calCenter(Chess chess) {
@@ -421,13 +554,13 @@ public:
     Chess goodNext; // 最好的下一步
 };
 
+// 方向向量
+const int X[4] = { 1, 0, 1, 1 };
+const int Y[4] = { 0, 1, 1, -1 };
+
 class ValueAlgo
 {
 public:
-    // 方向向量
-    const int X[4] = { 1, 0, 1, 1 };
-    const int Y[4] = { 0, 1, 1, -1 };
-
     static int typeAssistanceTable[10][6][6][3];         // 棋型判断辅助表
     static int patternTable[65536][2];                   // 棋型表
     static int moveEvaluateTable[8][8][8][8];            // 走法评价表
@@ -490,11 +623,11 @@ public:
         if (type[LIVETHREE] > 1)
             return 200;
 
-        int value[6] = { 0, 2, 5, 5, 12, 12 };
+        int wins[6] = { 0, 2, 5, 5, 12, 12 };
         int score = 0;
         for (int i = 1; i <= RUSHFOUR; i++)
         {
-            score += value[i] * type[i];
+            score += wins[i] * type[i];
         }
 
         return score;
@@ -711,7 +844,6 @@ Chess MCTS::UCTsearch(Chess chess, point center, int player) {
     auto endTime = startTime + std::chrono::duration<double>(1.9); // Set end time for 1.9 seconds
 
     fa.clear();
-
     root = chess;
     mp.clear();
 
@@ -730,57 +862,78 @@ Chess MCTS::UCTsearch(Chess chess, point center, int player) {
     return bestChild(chess, player);        ///////////////// UCT
 }
 
-int MCTS::Simulation(Chess chess, int player) {
-    while (true)
-    {
-        if (GameModel::judgeAll(chess) || GameModel::is_terminate(chess))
-            break;
-        point h = calCenter(chess);
+point MCTS::UCTsearch2(Chess chess, int player) {
+    // Get the starting time
+    auto startTime = std::chrono::steady_clock::now();
+    auto endTime = startTime + std::chrono::duration<double>(1.9); // Set end time for 1.9 seconds
 
-        if (player == this->current_player) {
-            ValueAlgo cal;
-            chess = cal.ValueAssess(chess); ///// ????
-            player = (player == 1 ? 2 : 1);
-        }
+    fa.clear();
+    root = chess;
+    mp.clear();
+    
+    int runNum = 0;
+    while (std::chrono::steady_clock::now() < endTime) {
+        auto start = std::chrono::steady_clock::now();
 
-        // 这里开始随机下棋
-        int randNum = rand() % 100;
-        int i = 0, j = 0;
-        if (randNum < 50) {
-            i = std::min(std::max(0, h.first - searchRange + rand() % (searchRange * 2 + 1)), boxNum);
-            j = std::min(std::max(0, h.second - searchRange + rand() % (searchRange * 2 + 1)), boxNum);
-        }
-        else {
-            i = rand() % (boxNum + 1);
-            j = rand() % (boxNum + 1);
-        }
-        if (!chess.getChess(i, j)) {
-            chess.setChess(i, j, player);
-            player = (player == 1 ? 2 : 1);
+        Chess selectNode = this->Selection2(chess, player);
+
+        auto selectionEnd = std::chrono::steady_clock::now();
+        std::chrono::duration<double> selectionDuration = selectionEnd - start;
+        std::cout << "Selection Duration: " << selectionDuration.count() << " seconds" << std::endl;
+
+        this->expandNode2(selectNode, player);
+
+        auto expandEnd = std::chrono::steady_clock::now();
+        std::chrono::duration<double> expandDuration = expandEnd - selectionEnd;
+        std::cout << "Expand Duration: " << expandDuration.count() << " seconds" << std::endl;
+
+        int result = this->Simulation2(selectNode, player);
+
+        auto simulationEnd = std::chrono::steady_clock::now();
+        std::chrono::duration<double> simulationDuration = simulationEnd - expandEnd;
+        std::cout << "Simulation Duration: " << simulationDuration.count() << " seconds" << std::endl;
+
+        this->backUp2(selectNode, chess, result);
+
+        auto backUpEnd = std::chrono::steady_clock::now();
+        std::chrono::duration<double> backUpDuration = backUpEnd - simulationEnd;
+        std::cout << "BackUp Duration: " << backUpDuration.count() << " seconds" << std::endl;
+    }
+    endTime = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime);
+    IO::output_DEBUG("singing's code run time(ms): " + to_string(duration.count()));
+    IO::output_DEBUG("singing's code run time: " + to_string(runNum));
+
+    //for (int i = 0; i < 1000; i++) {
+    //    Chess selectNode = this->Selection2(chess, player);
+    //    expandNode2(selectNode, player);
+    //    int result = Simulation2(selectNode, player);
+    //    backUp2(selectNode, chess, result);
+    //}
+
+    Chess bestChild;
+    double bestVisits = -1e9;
+    for (Chess child : mp[chess].vec) {
+        int visits = mp[child].visits;
+        if (visits > bestVisits) {
+            bestVisits = visits;
+            bestChild = child;
         }
     }
-
-    int result = GameModel::judgeAll(chess);
-    return (result == current_opponent) ? -1 : (result == current_player) ? 1 : 0;
+    return bestChild.getLastPoint();
 }
 
-double MCTS::UCT(Chess chess, int player) {
-    if (mp[chess].mockNum == 0)
-        return 0;
-    double val = mp[chess].value, mocknum = mp[chess].mockNum;
-    if (val + mocknum == 0) // 这代表每一次都输
-        return -std::numeric_limits<double>::infinity();
-    if (player == current_player)    // black win
-        return val / mocknum + sqrt(2 * log(mocknum) / mocknum);  // 参数是 2 还是多少？
-    else // white win
-        return -val / mocknum + sqrt(2 * log(mocknum) / mocknum); /// 为什么是负的 simulation 返回值有-1
-}
+int ValueAlgo::typeAssistanceTable[10][6][6][3] = { 0 };  // 初始化棋型判断辅助表
+int ValueAlgo::patternTable[65536][2] = { 0 };           // 初始化棋型表
+int ValueAlgo::moveEvaluateTable[8][8][8][8] = { 0 };    // 初始化走法评价表
+
 
 int main() {
     MCTS mcts;
     Chess chess;
     int player = 1;
     int opponent = 2;
+    srand(time(NULL));
 
     // 暂时使用 while 忙等待来实现  之后修改为多线程，在等待中继续进行计算
     string input;
@@ -812,8 +965,10 @@ int main() {
                 // 执行需要计时的代码块
                 ValueAlgo::initValueAlgo();
 
-                chess = mcts.UCTsearch(chess, chess.getLastPoint(), player);
-                IO::output_PLACE(make_pair(chess.getLastPoint().first, chess.getLastPoint().second));
+                //chess = mcts.UCTsearch(chess, chess.getLastPoint(), player);
+                //IO::output_PLACE(make_pair(chess.getLastPoint().first, chess.getLastPoint().second));
+                point result = mcts.UCTsearch2(chess, player);
+                IO::output_PLACE(result);
 
                 // 结束计时
                 auto endTime = std::chrono::high_resolution_clock::now();

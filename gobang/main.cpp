@@ -24,6 +24,7 @@ using namespace std;
 #define BLACK 1  // 黑白棋
 #define WHITE 0
 #define EMPTY 2 /////////////
+#define OUT 3
 
 #define BOARD_SIZE 12  // 边界
 #define MIN 0
@@ -44,8 +45,6 @@ static int moveEvaluateTable[8][8][8][8] = { 0 };    // 初始化走法评价表
 #define SLEEPTHREE 3			// 眠三
 #define LIVETWO 2				// 活二
 #define SLEEPTWO 1				// 眠二
-
-
 
 // 输入输出
 class IO {
@@ -76,8 +75,12 @@ private:
 
 public:
     // 对外接口
-    void setChess(int x, int y, int player) { gomoku[x][y] = player; lastPoint = std::make_pair(x, y); }
-    int getChess(int x, int y) const { return gomoku[x][y]; }
+    void setChess(int x, int y, int player);
+    int getChess(int x, int y) const {
+        if (x < 0 || x > BOARD_SIZE - 1 || y < 0 || y > BOARD_SIZE - 1)
+            return OUT;
+        return gomoku[x][y]; 
+    }
     bool isValidMove(int x, int y) const { return gomoku[x][y] == 0; }
     int& getpattern(int x, int y, int player, int direction) { return pattern[x][y][player][direction]; }
     point getLastPoint() const { return lastPoint; }
@@ -87,11 +90,9 @@ public:
     pattern(BOARD_SIZE, vector<vector<vector<int>>>(BOARD_SIZE, vector<vector<int>>(2, vector<int>(4)))) {
         lastPoint = std::make_pair(0, 0);
 
-        gomoku[5][5] = WHITE;
-        gomoku[5][6] = BLACK;
-        gomoku[6][5] = BLACK;
-        gomoku[6][6] = WHITE;
-
+        setChess(5, 5, WHITE);
+        setChess(5, 6, BLACK);
+        setChess(6, 5, BLACK);
         setChess(6, 6, WHITE); // 当己方为黑棋时，给出一个白棋的上一步位点
     }
 
@@ -242,7 +243,7 @@ public:
     //unordered_map<Chess, Properity, ChessHash> mp; //  Hash map   测试后发现效率比map略低
     //unordered_map<Chess, Chess, ChessHash> fa; // 父节点
 
-    int chooseCnt = 0; // 选择次数
+    int is_black_start_first_drop = 0; // 当前的落子数
 
     int current_player = 1; // 当前玩家 1黑 0白
     int current_opponent = 0;
@@ -264,41 +265,41 @@ public:
 
     point UCTsearch2(Chess chess, int player);
 
-    /// @brief 选择
-    Chess Selection(Chess chess, point center, int player) {
-        while (!GameModel::is_terminate(chess) && !GameModel::judgeAll(chess)) // 这里可以删除掉
-        {
-            int x1 = std::max(0, center.first - searchRange);
-            int x2 = std::min(boxNum, center.first + searchRange);
-            int y1 = std::max(0, center.second - searchRange);
-            int y2 = std::min(boxNum, center.second + searchRange);
+    ///// @brief 选择
+    //Chess Selection(Chess chess, point center, int player) {
+    //    while (!GameModel::is_terminate(chess) && !GameModel::judgeAll(chess)) // 这里可以删除掉
+    //    {
+    //        int x1 = std::max(0, center.first - searchRange);
+    //        int x2 = std::min(boxNum, center.first + searchRange);
+    //        int y1 = std::max(0, center.second - searchRange);
+    //        int y2 = std::min(boxNum, center.second + searchRange);
 
-            // 如果当前范围中还有 没有棋子的节点 且 没有被扩展的节点
-            if (cntNum(chess, x1, x2, y1, y2) + mp[chess].vec.size() < (x2 - x1 + 1) * (y2 - y1 + 1)) {
-                return expandNode(chess, center, player); /////////////// 这里的返回值需要改
-            }
-            else { // 如果选中范围中节点全部被扩展过
-                Chess y = chess;
+    //        // 如果当前范围中还有 没有棋子的节点 且 没有被扩展的节点
+    //        if (cntNum(chess, x1, x2, y1, y2) + mp[chess].vec.size() < (x2 - x1 + 1) * (y2 - y1 + 1)) {
+    //            return expandNode(chess, center, player); /////////////// 这里的返回值需要改
+    //        }
+    //        else { // 如果选中范围中节点全部被扩展过
+    //            Chess y = chess;
 
-                if (mp[y].vec.size() == 0) {
-                    IO::output_DEBUG("treePolicy() error：当前范围内所有节点都被扩展过，但当前节点没有子节点");
-                    break;
-                }// 这一步是不能被执行的 否则没有返回值了
+    //            if (mp[y].vec.size() == 0) {
+    //                IO::output_DEBUG("treePolicy() error：当前范围内所有节点都被扩展过，但当前节点没有子节点");
+    //                break;
+    //            }// 这一步是不能被执行的 否则没有返回值了
 
-                double maxn = -std::numeric_limits<double>::infinity();
+    //            double maxn = -std::numeric_limits<double>::infinity();
 
-                // 找最佳的子节点进行下一层的搜索
-                for (auto it = mp[y].vec.begin(); it != mp[y].vec.end(); it++) {
-                    if (UCT(*it, player) >= maxn) {
-                        maxn = UCT(*it, player);
-                        chess = *it;
-                    }
-                }
-                fa[chess] = y;
-            }
-            player = (player == 1 ? 2 : 1);
-        }
-    }
+    //            // 找最佳的子节点进行下一层的搜索
+    //            for (auto it = mp[y].vec.begin(); it != mp[y].vec.end(); it++) {
+    //                if (UCT(*it, player) >= maxn) {
+    //                    maxn = UCT(*it, player);
+    //                    chess = *it;
+    //                }
+    //            }
+    //            fa[chess] = y;
+    //        }
+    //        player = (player == 1 ? 2 : 1);
+    //    }
+    //}
     Chess Selection2(Chess chess, int player) {
         while (!mp[chess].vec.empty()) {
             Chess currentNode = chess;
@@ -317,44 +318,6 @@ public:
     }
 
     // 扩展
-    /// @attention 目前只有5*5的范围内搜索，搜索100000次，如果运气非常非常非常非常不好就expand不到那1/25的点~
-    Chess expandNode(Chess chess, point center, int player) {
-        Chess y = chess;
-
-        int x1 = std::max(0, center.first - searchRange);
-        int x2 = std::min(boxNum, center.first + searchRange);
-        int y1 = std::max(0, center.second - searchRange);
-        int y2 = std::min(boxNum, center.second + searchRange);
-
-        int putCnt = 0;
-        while (putCnt <= 10000)
-        {
-            int i = x1 + rand() % (x2 - x1 + 1);
-            int j = y1 + rand() % (y2 - y1 + 1);
-            int o = chess.getChess(i, j);
-            y.setChess(i, j, player);
-            if (!o && mp.find(y) == mp.end()) // 如果当前位置为空 y未被扩展过
-            {
-                if (goodNext == y) // 特殊情况  如果当前要扩展的节点刚好是现在最佳的节点，则提高其优先级
-                {
-                    initChess(y);
-                    mp[y].wins += 1000;
-                    mp[chess].vec.push_back(goodNext);
-                    fa[y] = chess;
-                    return y;
-                }
-
-
-                initChess(y);
-                mp[chess].vec.push_back(y);
-                fa[y] = chess;
-                return y;
-            }
-            y.setChess(i, j, o);
-            putCnt++;
-        }
-    }
-
     void expandNode2(Chess chess) { // 这个实现中没有center中心计算
         for (int i = 0; i < BOARD_SIZE; i++) {
             for (int j = 0; j < BOARD_SIZE; j++) {
@@ -376,7 +339,6 @@ public:
 
     void expandNode3(Chess chess, int player) { // 价值评估版
         // 生成走法
-        int moveCount = 0;  // 筛选排序后的走法数
         int value;
         vector<pair<point, int>> tempMemList;
         for (int i = 0; i < BOARD_SIZE; i++) {
@@ -455,6 +417,9 @@ public:
                 }
                 else break;
             }
+
+            if (move.size() != 0)
+                return;
 
             // 寻找双方能冲四的点
             for (int i = move.size(); i < tempMemList.size(); i++) {
@@ -538,20 +503,6 @@ public:
     }
 
     // 回退
-    void backUp(Chess child, Chess root, int wins) {
-        mp[child].wins += wins;
-        mp[child].visits++;
-        while (!(child == root))
-        {
-            if (fa.find(child) == fa.end())
-                break;
-            child = fa[child];
-
-            mp[child].wins += wins;
-            mp[child].visits++;
-        }
-    }
-
     void backUp2(Chess child, Chess root, int wins) {
         mp[child].wins += wins;
         mp[child].visits++;
@@ -576,16 +527,6 @@ public:
                 ans = *it;
             }
         }
-        //if (chooseCnt >= 25) // 这是在干什么 ？  这样会导致几乎选定的一定是goodNext  和搜索就没关系了
-        //{
-        //    std::vector<Chess>::iterator iter = std::find(mp[root].vec.begin(), mp[root].vec.end(), goodNext);
-        //    if (iter == mp[root].vec.end()) // 如果预测的goodNext没有被随机模拟出来
-        //    {
-        //        mp[chess].vec.push_back(goodNext);
-        //        ///////////////tree.find(chess).addChild(goodNext);
-        //        ans = goodNext;
-        //    }
-        //}
 
         return ans;
     }
@@ -646,7 +587,6 @@ public:
     }
 
     Chess root; // 当前局面
-    Chess goodNext; // 最好的下一步
 };
 
 // 方向向量
@@ -656,10 +596,6 @@ const int Y[4] = { 0, 1, 1, -1 };
 class ValueAlgo
 {
 public:
-    //static int typeAssistanceTable[10][6][6][3];         // 棋型判断辅助表
-    //static int patternTable[65536][2];                   // 棋型表
-    //static int moveEvaluateTable[8][8][8][8];            // 走法评价表
-
     ValueAlgo() = delete; // 禁止实例化
 
     // 更新棋型
@@ -704,7 +640,7 @@ public:
         return key;
     }
 
-    // 获取走法的价值 a,b,c,d : 四个方向的棋型   /////////////////// 这个函数需要修改  和UCT算法的权值进行匹配
+    // 获取走法的价值 a,b,c,d : 四个方向的棋型
     static int GetPval(int a, int b, int c, int d) {
         int type[8] = { 0 };
         type[a]++; type[b]++; type[c]++; type[d]++;
@@ -933,28 +869,10 @@ public:
     }
 };
 
-Chess MCTS::UCTsearch(Chess chess, point center, int player) {
-    // Get the starting time
-    auto startTime = std::chrono::steady_clock::now();
-    auto endTime = startTime + std::chrono::duration<double>(1.9); // Set end time for 1.9 seconds
-    
-    fa.clear();
-    root = chess;
-    mp.clear();
-
-    while (std::chrono::steady_clock::now() < endTime) {
-        chooseCnt++;
-        Chess selectPoint = Selection(chess, center, player);   //////// UCT
-
-        for (int i = 1; i <= simulationNum; i++) {
-            int newPlayer = (player == 1) ? 2 : 1;
-            int val = Simulation(selectPoint, newPlayer);
-            backUp(selectPoint, chess, val);
-        }
-    }
-
-    IO::output_DEBUG("sining's code simulation time" + to_string(chooseCnt));
-    return bestChild(chess, player);        ///////////////// UCT
+void Chess::setChess(int x, int y, int player) {
+    gomoku[x][y] = player;
+    lastPoint = std::make_pair(x, y);
+    ValueAlgo::UpdateType(*this, x, y);
 }
 
 #define DEBUG_OUTPUT 0
@@ -968,6 +886,11 @@ point MCTS::UCTsearch2(Chess chess, int player) {
     root = chess;
     mp.clear();
     initChess(chess, player);
+
+    if (this->is_black_start_first_drop == 0 && current_player == 1) {
+        is_black_start_first_drop = 1;
+        return make_pair(7, 6);
+    }
     
     int runNum = 0;
     while (std::chrono::steady_clock::now() < endTime) {
@@ -1026,9 +949,13 @@ point MCTS::UCTsearch2(Chess chess, int player) {
 int main() {
     MCTS mcts;
     Chess chess;
+    ValueAlgo::initValueAlgo();
     int player = 1;
     int opponent = 0;
     srand(time(NULL));
+
+    //if (mcts.isType(chess, { 7, 7 }, WHITE, LIVETWO))
+    //    cout << "XXXXXXXXXXXXXXXXXXXXXXXX" << endl;
 
     // 暂时使用 while 忙等待来实现  之后修改为多线程，在等待中继续进行计算
     string input;
@@ -1057,12 +984,8 @@ int main() {
                 chess.setChess(x, y, opponent);
                 break;
             case TURN: {
-                // 执行需要计时的代码块
-                ValueAlgo::initValueAlgo();
-
-                //chess = mcts.UCTsearch(chess, chess.getLastPoint(), player);
-                //IO::output_PLACE(make_pair(chess.getLastPoint().first, chess.getLastPoint().second));
                 point result = mcts.UCTsearch2(chess, player);
+                chess.setChess(result.first, result.second, player);
                 IO::output_PLACE(result);
 
                 // 结束计时

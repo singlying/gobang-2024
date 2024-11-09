@@ -1,14 +1,14 @@
 ﻿#include <algorithm>
 #include <chrono>
 #include <cmath>
-#include <string>
-#include <limits>
 #include <iostream>
-#include <random>
+#include <limits>
 #include <map>
+#include <random>
+#include <sstream>
+#include <string>
 #include <unordered_map>
 #include <utility>
-#include <sstream>
 #include <vector>
 using namespace std;
 
@@ -23,77 +23,86 @@ using namespace std;
 // 基本参数
 #define BLACK 1  // 黑白棋
 #define WHITE 0
-#define EMPTY 2 /////////////
+#define EMPTY 2
 #define OUT 3
 
 #define BOARD_SIZE 12  // 边界
 #define MIN 0
 
-#define MAXMOVES 10 // 每次扩展节点最多扩展的数量
+#define MAXMOVES 10  // 每次扩展节点最多扩展的数量
 
 constexpr static int boxNum = 11;
 
-static int typeAssistanceTable[10][6][6][3] = { 0 };  // 初始化棋型判断辅助表
-static int patternTable[65536][2] = { 0 };           // 初始化棋型表
-static int moveEvaluateTable[8][8][8][8] = { 0 };    // 初始化走法评价表
+
 
 // 棋形  for ValueAlgo
-#define FIVE 7					// 成五
-#define LIVEFOUR 6				// 活四
-#define RUSHFOUR 5				// 冲四
-#define LIVETHREE 4				// 活四
-#define SLEEPTHREE 3			// 眠三
-#define LIVETWO 2				// 活二
-#define SLEEPTWO 1				// 眠二
+#define L_FIVE 7        // 成五
+#define L_FOOUR 6    // 活四
+#define R_FOUR 5    // 冲四
+#define L_THREE 4   // 活四
+#define SLEEP_THREE 3  // 眠三
+#define L_TWO 2     // 活二
+#define SLEEP_TWO 1    // 眠二
 
 // 输入输出
 class IO {
-public:
+   public:
     static int getCommand(const std::string& command) {
         static const unordered_map<std::string, int> commandMap =
-        { {"START", START}, {"PLACE", PLACE}, {"TURN", TURN} };
+            {{"START", START}, {"PLACE", PLACE}, {"TURN", TURN}};
 
         auto it = commandMap.find(command);
-        if (it != commandMap.end()) return it->second;  // 返回对应的宏值
-        else return END;  // 未找到指令返回 END
+        if (it != commandMap.end())
+            return it->second;  // 返回对应的宏值
+        else
+            return END;  // 未找到指令返回 END
     }
 
-    static void output_OK() { printf("OK\n"); fflush(stdout); }
-    static void output_PLACE(const point p) { printf("%d %d\n", p.first, p.second); fflush(stdout); }
-    static void output_DEBUG(const string& message) { printf("DEBUG %s\n", message.c_str()); fflush(stdout); }
+    static void output_OK() {
+        printf("OK\n");
+        fflush(stdout);
+    }
+    static void output_PLACE(const point p) {
+        printf("%d %d\n", p.first, p.second);
+        fflush(stdout);
+    }
+    static void output_DEBUG(const string& message) {
+        printf("DEBUG %s\n", message.c_str());
+        fflush(stdout);
+    }
 
     IO() = delete;
 };
 
-class Chess
-{
-private:
-    std::vector<std::vector<int>> gomoku;
+class Chess {
+   private:
+    std::vector<std::vector<int>> gomoku; // 棋盘
     point lastPoint;
-    vector<vector<vector<vector<int>>>> pattern; // 存储棋盘单个点的棋形  2个player 4各方向
+    vector<vector<vector<vector<int>>>> pattern;  // 存储棋盘单个点的棋形  2个player 4各方向
     friend struct ChessHash;
 
-public:
+   public:
     // 对外接口
     void setChess(int x, int y, int player);
     int getChess(int x, int y) const {
         if (x < 0 || x > BOARD_SIZE - 1 || y < 0 || y > BOARD_SIZE - 1)
             return OUT;
-        return gomoku[x][y]; 
+        return gomoku[x][y];
     }
     bool isValidMove(int x, int y) const { return gomoku[x][y] == 0; }
     int& getpattern(int x, int y, int player, int direction) { return pattern[x][y][player][direction]; }
     point getLastPoint() const { return lastPoint; }
     std::vector<std::vector<int>> getGomoku() const { return this->gomoku; }
 
-    Chess(): gomoku(BOARD_SIZE, std::vector<int>(BOARD_SIZE, EMPTY)), 
-    pattern(BOARD_SIZE, vector<vector<vector<int>>>(BOARD_SIZE, vector<vector<int>>(2, vector<int>(4)))) {
+    Chess()
+        : gomoku(BOARD_SIZE, std::vector<int>(BOARD_SIZE, EMPTY)),
+          pattern(BOARD_SIZE, vector<vector<vector<int>>>(BOARD_SIZE, vector<vector<int>>(2, vector<int>(4)))) {
         lastPoint = std::make_pair(0, 0);
 
         setChess(5, 5, WHITE);
         setChess(5, 6, BLACK);
         setChess(6, 5, BLACK);
-        setChess(6, 6, WHITE); // 当己方为黑棋时，给出一个白棋的上一步位点
+        setChess(6, 6, WHITE);  // 当己方为黑棋时，给出一个白棋的上一步位点
     }
 
     Chess(int rgomoku[boxNum + 1][boxNum + 1]) {
@@ -104,14 +113,11 @@ public:
                 gomoku[i][j] = rgomoku[i][j];
     }
 
-public:
-
-    friend bool operator<(Chess x, Chess y)//用于搜索棋盘状态
+   public:
+    friend bool operator<(Chess x, Chess y)  // 用于搜索棋盘状态
     {
-        for (int i = 0; i <= boxNum; i++)
-        {
-            for (int j = 0; j <= boxNum; j++)
-            {
+        for (int i = 0; i <= boxNum; i++) {
+            for (int j = 0; j <= boxNum; j++) {
                 if (x.gomoku[i][j] < y.gomoku[i][j])
                     return 1;
                 else if (x.gomoku[i][j] > y.gomoku[i][j])
@@ -121,12 +127,10 @@ public:
         return 0;
     }
 
-    friend bool operator==(Chess x, Chess y)//用于判断棋盘状态是否相等
+    friend bool operator==(Chess x, Chess y)  // 用于判断棋盘状态是否相等
     {
-        for (int i = 0; i <= boxNum; i++)
-        {
-            for (int j = 0; j < boxNum; j++)
-            {
+        for (int i = 0; i <= boxNum; i++) {
+            for (int j = 0; j < boxNum; j++) {
                 if (x.gomoku[i][j] != y.gomoku[i][j])
                     return 0;
             }
@@ -135,9 +139,12 @@ public:
     }
 };
 
-class GameModel
-{
-public:
+static int typeAssistanceTable[10][6][6][3] = { 0 };  // 初始化棋型判断辅助表
+static int patternTable[65536][2] = { 0 };            // 初始化棋型表
+static int moveEvaluateTable[8][8][8][8] = { 0 };     // 初始化走法评价表
+
+class GameModel {
+   public:
     GameModel() = default;
 
     static int getopponent(int player) { return player == BLACK ? WHITE : BLACK; }
@@ -150,11 +157,10 @@ public:
 
         // 定义四个方向
         const std::vector<point> directions = {
-            {1, 0}, {0, 1}, {1, 1}, {1, -1}
-        };
+            {1, 0}, {0, 1}, {1, 1}, {1, -1}};
 
         for (const auto& dir : directions) {
-            int count = 1; // 包含自己
+            int count = 1;  // 包含自己
 
             // 向一个方向检查
             for (int step = 1; step < 5; ++step) {
@@ -162,8 +168,7 @@ public:
                 int ny = y + dir.second * step;
                 if (nx > 0 && nx <= boxNum && ny > 0 && ny <= boxNum && chess.getChess(nx, ny) == player) {
                     count++;
-                }
-                else {
+                } else {
                     break;
                 }
             }
@@ -174,18 +179,17 @@ public:
                 int ny = y - dir.second * step;
                 if (nx > 0 && nx <= boxNum && ny > 0 && ny <= boxNum && chess.getChess(nx, ny) == player) {
                     count++;
-                }
-                else {
+                } else {
                     break;
                 }
             }
 
             // 检查是否有五个连成一线
             if (count >= 5) {
-                return player == BLACK ? 1 : -1; // 返回获胜玩家
+                return player == BLACK ? 1 : -1;  // 返回获胜玩家
             }
         }
-        return 0; // 游戏未结束
+        return 0;  // 游戏未结束
     }
 
     // 返回1时代表棋盘满了，是终端节点 0 棋盘没有满
@@ -200,11 +204,10 @@ public:
 };
 
 // 每个节点的属性
-class Properity
-{
-public:
-    double visits; // 模拟次数
-    double wins; // 节点价值
+class Properity {
+   public:
+    double visits;  // 模拟次数
+    double wins;    // 节点价值
     int player;
     std::vector<Chess> vec;  // 关联的棋子
 };
@@ -231,21 +234,20 @@ struct ChessHash {
     }
 };
 
-class MCTS
-{
-public:
-    static const int searchRange = 2;       ///< 搜索范围
-    static const int selectNum = 100;        ///< 选择次数
-    static const int simulationNum = 8;     ///< 每个状态模拟次数
+class MCTS {
+   public:
+    static const int searchRange = 2;    ///< 搜索范围
+    static const int selectNum = 100;    ///< 选择次数
+    static const int simulationNum = 8;  ///< 每个状态模拟次数
 
-    std::map<Chess, Properity> mp; // 每个棋局中棋子个数 
-    std::map<Chess, Chess> fa; // 父节点
-    //unordered_map<Chess, Properity, ChessHash> mp; //  Hash map   测试后发现效率比map略低
-    //unordered_map<Chess, Chess, ChessHash> fa; // 父节点
+    std::map<Chess, Properity> mp;  // 每个棋局中棋子个数
+    std::map<Chess, Chess> fa;      // 父节点
+    // unordered_map<Chess, Properity, ChessHash> mp; //  Hash map   测试后发现效率比map略低
+    // unordered_map<Chess, Chess, ChessHash> fa; // 父节点
 
-    int is_black_start_first_drop = 0; // 当前的落子数
+    int is_black_start_first_drop = 0;  // 当前的落子数
 
-    int current_player = 1; // 当前玩家 1黑 0白
+    int current_player = 1;  // 当前玩家 1黑 0白
     int current_opponent = 0;
 
     // 初始化棋局
@@ -256,50 +258,13 @@ public:
         mp[chess] = p;
     }
 
-public:
+   public:
     MCTS() = default;
 
     // 实现树的搜索，返回最优的落子位置
     /// 搜索函数传入的是原来那个chess
-    Chess UCTsearch(Chess chess, point center, int player);
-
     point UCTsearch2(Chess chess, int player);
 
-    ///// @brief 选择
-    //Chess Selection(Chess chess, point center, int player) {
-    //    while (!GameModel::is_terminate(chess) && !GameModel::judgeAll(chess)) // 这里可以删除掉
-    //    {
-    //        int x1 = std::max(0, center.first - searchRange);
-    //        int x2 = std::min(boxNum, center.first + searchRange);
-    //        int y1 = std::max(0, center.second - searchRange);
-    //        int y2 = std::min(boxNum, center.second + searchRange);
-
-    //        // 如果当前范围中还有 没有棋子的节点 且 没有被扩展的节点
-    //        if (cntNum(chess, x1, x2, y1, y2) + mp[chess].vec.size() < (x2 - x1 + 1) * (y2 - y1 + 1)) {
-    //            return expandNode(chess, center, player); /////////////// 这里的返回值需要改
-    //        }
-    //        else { // 如果选中范围中节点全部被扩展过
-    //            Chess y = chess;
-
-    //            if (mp[y].vec.size() == 0) {
-    //                IO::output_DEBUG("treePolicy() error：当前范围内所有节点都被扩展过，但当前节点没有子节点");
-    //                break;
-    //            }// 这一步是不能被执行的 否则没有返回值了
-
-    //            double maxn = -std::numeric_limits<double>::infinity();
-
-    //            // 找最佳的子节点进行下一层的搜索
-    //            for (auto it = mp[y].vec.begin(); it != mp[y].vec.end(); it++) {
-    //                if (UCT(*it, player) >= maxn) {
-    //                    maxn = UCT(*it, player);
-    //                    chess = *it;
-    //                }
-    //            }
-    //            fa[chess] = y;
-    //        }
-    //        player = (player == 1 ? 2 : 1);
-    //    }
-    //}
     Chess Selection2(Chess chess, int player) {
         while (!mp[chess].vec.empty()) {
             Chess currentNode = chess;
@@ -314,11 +279,10 @@ public:
             }
         }
         return chess;
-
     }
 
     // 扩展
-    void expandNode2(Chess chess) { // 这个实现中没有center中心计算
+    void expandNode2(Chess chess) {  // 这个实现中没有center中心计算
         for (int i = 0; i < BOARD_SIZE; i++) {
             for (int j = 0; j < BOARD_SIZE; j++) {
                 if (chess.isValidMove(i, j)) {
@@ -327,8 +291,8 @@ public:
                     newnode.setChess(i, j, GameModel::getopponent(player));
                     initChess(newnode, GameModel::getopponent(player));
 
-                    //if (mp.find(chess) == mp.end())
-                    //    throw "error : mp.find(chess) == mp.end()";
+                    // if (mp.find(chess) == mp.end())
+                    //     throw "error : mp.find(chess) == mp.end()";
 
                     mp[chess].vec.push_back(newnode);
                     fa[newnode] = chess;
@@ -337,7 +301,7 @@ public:
         }
     }
 
-    void expandNode3(Chess chess, int player) { // 价值评估版
+    void expandNode3(Chess chess, int player) {  // 价值评估版
         // 生成走法
         int value;
         vector<pair<point, int>> tempMemList;
@@ -345,7 +309,7 @@ public:
             for (int j = 0; j < BOARD_SIZE; j++) {
                 if (chess.getChess(i, j) == EMPTY) {
                     value = EvaluateMove(chess, make_pair(i, j));
-                    tempMemList.push_back({ make_pair(i, j), value });
+                    tempMemList.push_back({make_pair(i, j), value});
                 }
             }
         }
@@ -354,7 +318,7 @@ public:
         quickSort(tempMemList, 0, tempMemList.size() - 1);
         vector<point> move;
         CutMoveList(chess, move, tempMemList);
-        if (move.size() == 0) { // 如果没有特别紧急情况，则只选取前MAXMOVES进行扩展
+        if (move.size() == 0) {  // 如果没有特别紧急情况，则只选取前MAXMOVES进行扩展
             for (int i = 0; i < MAXMOVES && i < tempMemList.size(); i++)
                 move.push_back(tempMemList[i].first);
         }
@@ -372,7 +336,7 @@ public:
         int player_score = moveEvaluateTable[chess.getpattern(p.first, p.second, current_player, 0)][chess.getpattern(p.first, p.second, current_player, 1)]
                                             [chess.getpattern(p.first, p.second, current_player, 2)][chess.getpattern(p.first, p.second, current_player, 3)];
         int opponent_score = moveEvaluateTable[chess.getpattern(p.first, p.second, current_opponent, 0)][chess.getpattern(p.first, p.second, current_opponent, 1)]
-                                            [chess.getpattern(p.first, p.second, current_opponent, 2)][chess.getpattern(p.first, p.second, current_opponent, 3)];
+                                              [chess.getpattern(p.first, p.second, current_opponent, 2)][chess.getpattern(p.first, p.second, current_opponent, 3)];
 
         if (player_score >= 200 || opponent_score >= 200)
             return player_score >= opponent_score ? player_score * 2 : opponent_score;
@@ -382,23 +346,28 @@ public:
 
     // 快速排序
     void quickSort(std::vector<std::pair<point, int>>& tempMemList, int left, int right) {
-        if (left >= right) return;
+        if (left >= right)
+            return;
 
         int i = left, j = right;
-        int pivot = tempMemList[(left + right) / 2].second; // 选择中间元素作为基准
+        int pivot = tempMemList[(left + right) / 2].second;  // 选择中间元素作为基准
 
         while (i <= j) {
-            while (tempMemList[i].second > pivot) i++; // 找到第一个小于等于基准的元素
-            while (tempMemList[j].second < pivot) j--; // 找到第一个大于等于基准的元素
+            while (tempMemList[i].second > pivot)
+                i++;  // 找到第一个小于等于基准的元素
+            while (tempMemList[j].second < pivot)
+                j--;  // 找到第一个大于等于基准的元素
             if (i <= j) {
-                std::swap(tempMemList[i], tempMemList[j]); // 交换两个元素
+                std::swap(tempMemList[i], tempMemList[j]);  // 交换两个元素
                 i++;
                 j--;
             }
         }
 
-        if (left < j) quickSort(tempMemList, left, j); // 递归排序左半部分
-        if (i < right) quickSort(tempMemList, i, right); // 递归排序右半部分
+        if (left < j)
+            quickSort(tempMemList, left, j);  // 递归排序左半部分
+        if (i < right)
+            quickSort(tempMemList, i, right);  // 递归排序右半部分
     }
 
     // 寻找一些紧急情况 快速返回结果  活四，活三等
@@ -414,8 +383,8 @@ public:
             for (int i = 0; i < tempMemList.size(); i++) {
                 if (tempMemList[i].second == 1200) {
                     move.push_back(tempMemList[i].first);
-                }
-                else break;
+                } else
+                    break;
             }
 
             if (move.size() != 0)
@@ -424,19 +393,17 @@ public:
             // 寻找双方能冲四的点
             for (int i = move.size(); i < tempMemList.size(); i++) {
                 point p = tempMemList[i].first;
-                if (isType(chess, p, current_player, RUSHFOUR) || isType(chess, p, current_opponent, RUSHFOUR)) {
+                if (isType(chess, p, current_player, R_FOUR) || isType(chess, p, current_opponent, R_FOUR)) {
                     move.push_back(p);
                     if (move.size() >= MAXMOVES)
                         break;
                 }
             }
         }
-
     }
 
     inline bool isType(Chess& chess, point p, int color, int type) {
-        return chess.getpattern(p.first, p.second, color, 0) == type || chess.getpattern(p.first, p.second, color, 1) == type
-            || chess.getpattern(p.first, p.second, color, 2) == type || chess.getpattern(p.first, p.second, color, 3) == type;
+        return chess.getpattern(p.first, p.second, color, 0) == type || chess.getpattern(p.first, p.second, color, 1) == type || chess.getpattern(p.first, p.second, color, 2) == type || chess.getpattern(p.first, p.second, color, 3) == type;
     }
 
     // 模拟    游戏至结束，黑色赢返回1，白色返回-1，和棋返回0
@@ -447,11 +414,11 @@ public:
 
             point h = calCenter(chess);
 
-            //if (player == this->current_player) {
-            //    ValueAlgo cal;
-            //    chess = cal.ValueAssess(chess); ///// ????
-            //    player = (player == 1 ? 2 : 1);
-            //}
+            // if (player == this->current_player) {
+            //     ValueAlgo cal;
+            //     chess = cal.ValueAssess(chess); ///// ????
+            //     player = (player == 1 ? 2 : 1);
+            // }
 
             // 这里开始随机下棋
             int randNum = rand() % 100;
@@ -459,8 +426,7 @@ public:
             if (randNum < 50) {
                 i = std::min(std::max(0, h.first - searchRange + rand() % (searchRange * 2 + 1)), boxNum);
                 j = std::min(std::max(0, h.second - searchRange + rand() % (searchRange * 2 + 1)), boxNum);
-            }
-            else {
+            } else {
                 i = rand() % (boxNum + 1);
                 j = rand() % (boxNum + 1);
             }
@@ -471,7 +437,8 @@ public:
         }
 
         int result = GameModel::judgeAll(chess);
-        return (result == current_opponent) ? -1 : (result == current_player) ? 1 : 0;
+        return (result == current_opponent) ? -1 : (result == current_player) ? 1
+                                                                              : 0;
     }
 
     int Simulation2(Chess chess) {
@@ -487,19 +454,21 @@ public:
                 }
             }
 
-            if (validMoves.empty()) break;
+            if (validMoves.empty())
+                break;
 
-            int randIndex = rand() % validMoves.size(); // 随机模拟
+            int randIndex = rand() % validMoves.size();  // 随机模拟
             point move = validMoves[randIndex];
             currentNode.setChess(move.first, move.second, currentplayer);
 
             int result = GameModel::judgeAll(currentNode);
-            if (result != 0) return result;
+            if (result != 0)
+                return result;
 
             currentplayer = (currentplayer == BLACK ? WHITE : BLACK);
         }
-        
-        return 0; // 平局
+
+        return 0;  // 平局
     }
 
     // 回退
@@ -520,8 +489,7 @@ public:
         Chess ans = chess;
         double maxn = -std::numeric_limits<double>::infinity();
 
-        for (auto it = mp[chess].vec.begin(); it != mp[chess].vec.end(); it++)
-        {
+        for (auto it = mp[chess].vec.begin(); it != mp[chess].vec.end(); it++) {
             if (UCT(*it, nowblack) >= maxn) {
                 maxn = UCT(*it, nowblack);
                 ans = *it;
@@ -536,12 +504,12 @@ public:
         if (mp[chess].visits == 0)
             return 0;
         double wins = mp[chess].wins, visits = mp[chess].visits;
-        if (wins + visits == 0) // 这代表每一次都输
+        if (wins + visits == 0)  // 这代表每一次都输
             return -std::numeric_limits<double>::infinity();
-        if (player == current_player)    // black win
-            return wins / visits + sqrt(2 * log(visits) / visits);  // 参数是 2 还是多少？
-        else // white win
-            return -wins / visits + sqrt(2 * log(visits) / visits); /// 为什么是负的 simulation 返回值有-1
+        if (player == current_player)                                // black win
+            return wins / visits + sqrt(2 * log(visits) / visits);   // 参数是 2 还是多少？
+        else                                                         // white win
+            return -wins / visits + sqrt(2 * log(visits) / visits);  /// 为什么是负的 simulation 返回值有-1
     }
 
     double UCT2(Chess fa, Chess child, int player) {
@@ -551,19 +519,16 @@ public:
         double fa_visits = mp[fa].visits;
         if (player == current_player)
             return child_wins / child_visits + sqrt(2 * log(fa_visits) / child_visits);
-        else 
+        else
             return -child_wins / child_visits + sqrt(2 * log(fa_visits) / child_visits);
-        
     }
 
     // 返回当前局面平均坐标
     static point calCenter(Chess chess) {
         int cnt = 0, p1 = 0, p2 = 0;
         for (int i = 0; i <= boxNum; i++)
-            for (int j = 0; j <= boxNum; j++)
-            {
-                if (chess.getChess(i, j))
-                {
+            for (int j = 0; j <= boxNum; j++) {
+                if (chess.getChess(i, j)) {
                     cnt++;
                     p1 += i;
                     p2 += j;
@@ -586,37 +551,33 @@ public:
         return sum;
     }
 
-    Chess root; // 当前局面
+    Chess root;  // 当前局面
 };
 
 // 方向向量
-const int X[4] = { 1, 0, 1, 1 };
-const int Y[4] = { 0, 1, 1, -1 };
+const int X[4] = {1, 0, 1, 1};
+const int Y[4] = {0, 1, 1, -1};
 
-class ValueAlgo
-{
-public:
-    ValueAlgo() = delete; // 禁止实例化
+class ValueAlgo {
+   public:
+    ValueAlgo() = delete;  // 禁止实例化
 
     // 更新棋型
     static void UpdateType(Chess& chess, int row, int col) {
         int a, b;
         int key;
 
-        for (int i = 0; i < 4; ++i)
-        {
+        for (int i = 0; i < 4; ++i) {
             a = row + X[i];
             b = col + Y[i];
-            for (int j = 0; j < 4 && a >= 0 && b >= 0 && a < BOARD_SIZE && b < BOARD_SIZE; a += X[i], b += Y[i], ++j)
-            {
+            for (int j = 0; j < 4 && a >= 0 && b >= 0 && a < BOARD_SIZE && b < BOARD_SIZE; a += X[i], b += Y[i], ++j) {
                 key = GetKeyValue(chess, a, b, i);
                 chess.getpattern(a, b, 0, i) = patternTable[key][0];
                 chess.getpattern(a, b, 1, i) = patternTable[key][1];
             }
             a = row - X[i];
             b = col - Y[i];
-            for (int k = 0; k < 4 && a >= 0 && b >= 0 && a < BOARD_SIZE && b < BOARD_SIZE; a -= X[i], b -= Y[i], ++k)
-            {
+            for (int k = 0; k < 4 && a >= 0 && b >= 0 && a < BOARD_SIZE && b < BOARD_SIZE; a -= X[i], b -= Y[i], ++k) {
                 key = GetKeyValue(chess, a, b, i);
                 chess.getpattern(a, b, 0, i) = patternTable[key][0];
                 chess.getpattern(a, b, 1, i) = patternTable[key][1];
@@ -628,36 +589,31 @@ public:
     static int GetKeyValue(const Chess& chess, int row, int col, int i) {
         const int stepX = X[i];
         const int stepY = Y[i];
-        int key = (chess.getChess(row - stepX * 4, col - stepY * 4))
-            ^ (chess.getChess(row - stepX * 3, col - stepY * 3) << 2)
-            ^ (chess.getChess(row - stepX * 2, col - stepY * 2) << 4)
-            ^ (chess.getChess(row - stepX * 1, col - stepY * 1) << 6)
-            ^ (chess.getChess(row + stepX * 1, col + stepY * 1) << 8)
-            ^ (chess.getChess(row + stepX * 2, col + stepY * 2) << 10)
-            ^ (chess.getChess(row + stepX * 3, col + stepY * 3) << 12)
-            ^ (chess.getChess(row + stepX * 4, col + stepY * 4) << 14);
+        int key = (chess.getChess(row - stepX * 4, col - stepY * 4)) ^ (chess.getChess(row - stepX * 3, col - stepY * 3) << 2) ^ (chess.getChess(row - stepX * 2, col - stepY * 2) << 4) ^ (chess.getChess(row - stepX * 1, col - stepY * 1) << 6) ^ (chess.getChess(row + stepX * 1, col + stepY * 1) << 8) ^ (chess.getChess(row + stepX * 2, col + stepY * 2) << 10) ^ (chess.getChess(row + stepX * 3, col + stepY * 3) << 12) ^ (chess.getChess(row + stepX * 4, col + stepY * 4) << 14);
 
         return key;
     }
 
     // 获取走法的价值 a,b,c,d : 四个方向的棋型
     static int GetPval(int a, int b, int c, int d) {
-        int type[8] = { 0 };
-        type[a]++; type[b]++; type[c]++; type[d]++;
+        int type[8] = {0};
+        type[a]++;
+        type[b]++;
+        type[c]++;
+        type[d]++;
 
-        if (type[FIVE] > 0)
+        if (type[L_FIVE] > 0)
             return 5000;
-        if (type[LIVEFOUR] > 0 || type[RUSHFOUR] > 1)
+        if (type[L_FOOUR] > 0 || type[R_FOUR] > 1)
             return 1200;
-        if (type[RUSHFOUR] > 0 && type[LIVETHREE] > 0)
+        if (type[R_FOUR] > 0 && type[L_THREE] > 0)
             return 1000;
-        if (type[LIVETHREE] > 1)
+        if (type[L_THREE] > 1)
             return 200;
 
-        int wins[6] = { 0, 2, 5, 5, 12, 12 };
+        int wins[6] = {0, 2, 5, 5, 12, 12};
         int score = 0;
-        for (int i = 1; i <= RUSHFOUR; i++)
-        {
+        for (int i = 1; i <= R_FOUR; i++) {
             score += wins[i] * type[i];
         }
 
@@ -670,15 +626,11 @@ public:
         int line_left[9];
         int line_right[9];
 
-        for (int i = 0; i < 9; i++)
-        {
-            if (i == 4)
-            {
+        for (int i = 0; i < 9; i++) {
+            if (i == 4) {
                 line_left[i] = color;
                 line_right[i] = color;
-            }
-            else
-            {
+            } else {
                 line_left[i] = key & 3;
                 line_right[8 - i] = key & 3;
                 key >>= 2;
@@ -690,18 +642,15 @@ public:
         int p2 = ShortLine(line_right);
 
         // 如果两个方向都是眠三，有可能是活三，复查
-        if (p1 == SLEEPTHREE && p2 == SLEEPTHREE)
-        {
+        if (p1 == SLEEP_THREE && p2 == SLEEP_THREE) {
             return CheckThreeType(line_left);
         }
         // 如果两个方向都是眠四，有可能是活四，复查
-        else if (p1 == RUSHFOUR && p2 == RUSHFOUR)
-        {
+        else if (p1 == R_FOUR && p2 == R_FOUR) {
             return CheckFourType(line_left);
         }
         // 返回二者中最大那个
-        else
-        {
+        else {
             return p1 > p2 ? p1 : p2;
         }
     }
@@ -713,25 +662,18 @@ public:
         int k;
 
         int player = line[4];
-        for (k = 5; k <= 8; k++)
-        {
-            if (line[k] == player)
-            {
+        for (k = 5; k <= 8; k++) {
+            if (line[k] == player) {
                 if (empty + count > 4)
                     break;
                 ++count;
                 ++len;
                 len_back = empty + count;
-            }
-            else if (line[k] == EMPTY)
-            {
+            } else if (line[k] == EMPTY) {
                 ++len;
                 ++empty;
-            }
-            else
-            {
-                if (line[k - 1] == player)
-                {
+            } else {
+                if (line[k - 1] == player) {
                     block++;
                 }
                 break;
@@ -739,25 +681,18 @@ public:
         }
         // 计算中间空格
         empty = len_back - count;
-        for (k = 3; k >= 0; k--)
-        {
-            if (line[k] == player)
-            {
+        for (k = 3; k >= 0; k--) {
+            if (line[k] == player) {
                 if (empty + count > 4)
                     break;
                 ++count;
                 ++len;
                 len_back = empty + count;
-            }
-            else if (line[k] == EMPTY)
-            {
+            } else if (line[k] == EMPTY) {
                 ++len;
                 ++empty;
-            }
-            else
-            {
-                if (line[k + 1] == player)
-                {
+            } else {
+                if (line[k + 1] == player) {
                     block++;
                 }
                 break;
@@ -765,31 +700,27 @@ public:
         }
         return typeAssistanceTable[len][len_back][count][block];
     }
-    static int CheckThreeType(int* line) {     // 判断是活三还是眠三
+    static int CheckThreeType(int* line) {  // 判断是活三还是眠三
         int color = line[4];
         int type;
-        for (int i = 0; i < 9; i++)
-        {
-            if (line[i] == EMPTY)
-            {
+        for (int i = 0; i < 9; i++) {
+            if (line[i] == EMPTY) {
                 line[i] = color;
                 type = CheckFourType(line);
                 line[i] = EMPTY;
-                if (type == LIVEFOUR)
-                    return LIVETHREE;
+                if (type == L_FOOUR)
+                    return L_THREE;
             }
         }
-        return SLEEPTHREE;
+        return SLEEP_THREE;
     }
-    static int CheckFourType(int* line) {      // 判断是活四还是眠四
+    static int CheckFourType(int* line) {  // 判断是活四还是眠四
         int i, j, count;
 
         int five = 0;
         int color = line[4];
-        for (i = 0; i < 9; i++)
-        {
-            if (line[i] == EMPTY)
-            {
+        for (i = 0; i < 9; i++) {
+            if (line[i] == EMPTY) {
                 count = 0;
                 for (j = i - 1; j >= 0 && line[j] == color; j--)
                     count++;
@@ -800,39 +731,32 @@ public:
             }
         }
         // 如果有两个空位置能成五，就是活四
-        return five >= 2 ? LIVEFOUR : RUSHFOUR;
+        return five >= 2 ? L_FOOUR : R_FOUR;
     }
 
     // 生成棋型辅助表
     static int ChessTypeAssistance(int len, int len_back, int count, int block) {
-        if (len >= 5 && count > 1)
-        {
-            if (count == 5)
-            {
-                return FIVE;
+        if (len >= 5 && count > 1) {
+            if (count == 5) {
+                return L_FIVE;
             }
-            if (len > 5 && len_back < 5 && block == 0)
-            {
-                switch (count)
-                {
+            if (len > 5 && len_back < 5 && block == 0) {
+                switch (count) {
                     case 2:
-                        return LIVETWO;
+                        return L_TWO;
                     case 3:
-                        return LIVETHREE;
+                        return L_THREE;
                     case 4:
-                        return LIVEFOUR;
+                        return L_FOOUR;
                 }
-            }
-            else
-            {
-                switch (count)
-                {
+            } else {
+                switch (count) {
                     case 2:
-                        return SLEEPTWO;
+                        return SLEEP_TWO;
                     case 3:
-                        return SLEEPTHREE;
+                        return SLEEP_THREE;
                     case 4:
-                        return RUSHFOUR;
+                        return R_FOUR;
                 }
             }
         }
@@ -851,12 +775,12 @@ public:
                 }
             }
         }
-        //初始化棋型表
+        // 初始化棋型表
         for (int key = 0; key < 65536; key++) {
             patternTable[key][0] = LineType(0, key);
             patternTable[key][1] = LineType(1, key);
         }
-        //初始化走法评价表
+        // 初始化走法评价表
         for (int i = 0; i < 8; ++i) {
             for (int j = 0; j < 8; ++j) {
                 for (int k = 0; k < 8; ++k) {
@@ -880,7 +804,7 @@ void Chess::setChess(int x, int y, int player) {
 point MCTS::UCTsearch2(Chess chess, int player) {
     // Get the starting time
     auto startTime = std::chrono::steady_clock::now();
-    auto endTime = startTime + std::chrono::duration<double>(1.5); // Set end time for 1.9 seconds
+    auto endTime = startTime + std::chrono::duration<double>(1.5);  // Set end time for 1.9 seconds
 
     fa.clear();
     root = chess;
@@ -891,20 +815,20 @@ point MCTS::UCTsearch2(Chess chess, int player) {
         is_black_start_first_drop = 1;
         return make_pair(7, 6);
     }
-    
+
     int runNum = 0;
     while (std::chrono::steady_clock::now() < endTime) {
         runNum++;
         auto start = std::chrono::steady_clock::now();
 
-        Chess selectNode = this->Selection2(chess, player); ///////////
+        Chess selectNode = this->Selection2(chess, player);  ///////////
 
         auto selectionEnd = std::chrono::steady_clock::now();
         std::chrono::duration<double> selectionDuration = selectionEnd - start;
 #if DEBUG_OUTPUT
         std::cout << "Selection Duration: " << selectionDuration.count() << " seconds" << std::endl;
 #endif
-        this->expandNode3(selectNode, player); /////////////////
+        this->expandNode3(selectNode, player);  /////////////////
 
         auto expandEnd = std::chrono::steady_clock::now();
         std::chrono::duration<double> expandDuration = expandEnd - selectionEnd;
@@ -912,7 +836,7 @@ point MCTS::UCTsearch2(Chess chess, int player) {
         std::cout << "Expand Duration: " << expandDuration.count() << " seconds" << std::endl;
 #endif
 
-        int result = this->Simulation2(selectNode); ///////////////////
+        int result = this->Simulation2(selectNode);  ///////////////////
 
         auto simulationEnd = std::chrono::steady_clock::now();
         std::chrono::duration<double> simulationDuration = simulationEnd - expandEnd;
@@ -920,7 +844,7 @@ point MCTS::UCTsearch2(Chess chess, int player) {
         std::cout << "Simulation Duration: " << simulationDuration.count() << " seconds" << std::endl;
 #endif
 
-        this->backUp2(selectNode, chess, result); ////////////////////
+        this->backUp2(selectNode, chess, result);  ////////////////////
 
         auto backUpEnd = std::chrono::steady_clock::now();
         std::chrono::duration<double> backUpDuration = backUpEnd - simulationEnd;
@@ -954,13 +878,12 @@ int main() {
     int opponent = 0;
     srand(time(NULL));
 
-    //if (mcts.isType(chess, { 7, 7 }, WHITE, LIVETWO))
-    //    cout << "XXXXXXXXXXXXXXXXXXXXXXXX" << endl;
+    // if (mcts.isType(chess, { 7, 7 }, WHITE, L_TWO))
+    //     cout << "XXXXXXXXXXXXXXXXXXXXXXXX" << endl;
 
     // 暂时使用 while 忙等待来实现  之后修改为多线程，在等待中继续进行计算
     string input;
     while (getline(cin, input)) {
-
         // 开始计时
         auto startTime = std::chrono::high_resolution_clock::now();
 

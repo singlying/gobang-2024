@@ -98,4 +98,4 @@ AI类函数调用关系：
 
 BestMove  ->  SearchBest   ->    RootSearch   ->    AlphaBeta()递归函数  ->     NextMove()   ->    GenerateMove()  ->    EvaluateMove
 
-​																			Evaluate  ?
+​																			Evaluate

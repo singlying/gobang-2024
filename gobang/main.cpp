@@ -240,10 +240,10 @@ class MCTS {
     static const int selectNum = 100;    ///< 选择次数
     static const int simulationNum = 8;  ///< 每个状态模拟次数
 
-    std::map<Chess, Properity> mp;  // 每个棋局中棋子个数
-    std::map<Chess, Chess> fa;      // 父节点
-    // unordered_map<Chess, Properity, ChessHash> mp; //  Hash map   测试后发现效率比map略低
-    // unordered_map<Chess, Chess, ChessHash> fa; // 父节点
+    //std::map<Chess, Properity> mp;  // 每个棋局中棋子个数
+    //std::map<Chess, Chess> fa;      // 父节点
+     unordered_map<Chess, Properity, ChessHash> mp; //  Hash map   测试后发现效率比map略低
+     unordered_map<Chess, Chess, ChessHash> fa; // 父节点
 
     int is_black_start_first_drop = 0;  // 当前的落子数
 
@@ -878,10 +878,7 @@ int main() {
     int opponent = 0;
     srand(time(NULL));
 
-    // if (mcts.isType(chess, { 7, 7 }, WHITE, L_TWO))
-    //     cout << "XXXXXXXXXXXXXXXXXXXXXXXX" << endl;
 
-    // 暂时使用 while 忙等待来实现  之后修改为多线程，在等待中继续进行计算
     string input;
     while (getline(cin, input)) {
         // 开始计时
